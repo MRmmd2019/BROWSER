@@ -1,0 +1,128 @@
+name: 🧩 Browser Extractor Pro
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL of the page to extract'
+        required: true
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl zip
+
+      - name: Setup Node.js and Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps chromium
+
+      - name: Setup monolith
+        run: |
+          # Install monolith binary
+          curl -L https://github.com/Y2Z/monolith/releases/download/v2.10.1/monolith-v2.10.1-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv monolith /usr/local/bin/
+          echo "Monolith installed"
+
+      - name: Extract page with Playwright
+        run: node extract.js "${{ github.event.inputs.url }}"
+
+      - name: Create monolithic HTML
+        run: |
+          URL="${{ github.event.inputs.url }}"
+          DOMAIN=$(echo "$URL" | awk -F/ '{print $3}' | sed 's/^www\.//')
+          FOLDER_NAME="${DOMAIN}_$(date +%Y%m%d_%H%M%S)"
+          OUT_DIR="BROWSER/${FOLDER_NAME}"
+          mkdir -p "$OUT_DIR"
+          monolith "$URL" -o "$OUT_DIR/page_monolith.html"
+          echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
+          echo "FOLDER_NAME=$FOLDER_NAME" >> $GITHUB_ENV
+          echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
+          echo "URL=$URL" >> $GITHUB_ENV
+
+      - name: Move extracted assets to same folder
+        run: |
+          TEMP_DIR=$(ls -d BROWSER/tmp_* 2>/dev/null | head -1)
+          if [ -d "$TEMP_DIR" ]; then
+            mv "$TEMP_DIR"/* "$OUT_DIR/"
+            rm -rf "$TEMP_DIR"
+          fi
+
+      - name: Create ZIP archive (max compression)
+        run: |
+          cd "$OUT_DIR"
+          zip -9 -r "../../${FOLDER_NAME}.zip" .
+          cd ../..
+          echo "ZIP_FILE=${FOLDER_NAME}.zip" >> $GITHUB_ENV
+
+      - name: Generate README.md
+        run: |
+          SHA256=$(sha256sum "BROWSER/${FOLDER_NAME}.zip" | awk '{print $1}')
+          SIZE=$(du -sh "BROWSER/${FOLDER_NAME}.zip" | cut -f1)
+          RAW_URL="https://github.com/${{ github.repository }}/raw/${{ github.ref_name }}/BROWSER/${FOLDER_NAME}.zip"
+
+          cat > "$OUT_DIR/README.md" << 'EOF'
+          # ${FOLDER_NAME}
+
+          ---
+
+          ## 📄 Page Information
+          | Property          | Value                          |
+          |-------------------|--------------------------------|
+          | **Original URL**   | \`${URL}\` |
+          | **Archive Name**   | \`${FOLDER_NAME}.zip\`                |
+          | **Total Size**     | ${SIZE}                        |
+          | **Status**         | ✅ Complete                    |
+          | **Password Protected** | NO |
+          | **SHA256 Checksum**| \`${SHA256}\`                  |
+          | **Compression Level** | 9 (maximum)                 |
+
+          ---
+
+          ## 🔗 Download Link (ZIP Archive)
+          | # | File | Link |
+          |---|------|------|
+          | 1 | \`${FOLDER_NAME}.zip\` | [Download](${RAW_URL}) |
+
+          ---
+
+          ## 📦 Contents
+          - \`index.html\` – Full rendered HTML (from Playwright)
+          - \`screenshot.png\` – Full‑page screenshot
+          - \`assets/\` – All front‑end resources (CSS, JS, images, fonts) saved locally
+          - \`page_monolith.html\` – Self‑contained single HTML (inline CSS/images)
+
+          ---
+
+          ## 📦 How to Use
+          1. Download the ZIP file.
+          2. Open \`page_monolith.html\` for a clean, offline reading experience (all styles & images embedded).
+          3. Or open \`index.html\` and ensure the \`assets/\` folder is in the same directory to see the exact original page.
+          4. Refer to \`screenshot.png\` for a visual snapshot.
+          5. Verify integrity with the SHA256 checksum above.
+
+          ---
+
+          *Powered by [MR.MMD2019](https://github.com/MRmmd2019)*
+          EOF
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add BROWSER/
+          git commit -m "Add extracted page ${{ github.event.inputs.url }}" || true
+          git push

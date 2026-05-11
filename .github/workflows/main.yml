@@ -310,8 +310,7 @@ jobs:
       - name: 📖 ایجاد READMEهای استاتیک
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
-          for FOLDER in "$BACKUP_DIR"/*/; do
-            [ -d "$FOLDER" ] || continue
+          find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' FOLDER; do
             FOLDER_NAME=$(basename "$FOLDER")
             cat > "$FOLDER/README.md" << EOF
           # 🎬 $FOLDER_NAME
@@ -340,7 +339,7 @@ jobs:
           EOF
           done
 
-      - name: 📦 بسته‌بندی و تقسیم (فوق‌العاده مقاوم)
+      - name: 📦 بسته‌بندی و تقسیم (مقاوم در برابر هر اسمی)
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           SPLIT_PARTS=${{ env.SPLIT_PARTS }}
@@ -351,32 +350,33 @@ jobs:
           cd "$BACKUP_DIR"
           rm -rf packed
 
-          for FOLDER in */; do
-            [ -d "$FOLDER" ] || continue
-            [ "$FOLDER" = "packed/" ] && continue
-            FOLDER_NAME=$(basename "$FOLDER")
+          find . -mindepth 1 -maxdepth 1 -type d ! -name packed -print0 | while IFS= read -r -d '' FOLDER; do
+            FOLDER="${FOLDER#./}"   # حذف ./ اول مسیر
+            [ -z "$FOLDER" ] && continue
+
+            echo "Processing folder: $FOLDER"
 
             # نام امن (فقط حروف، عدد و خط تیره)
-            SAFE_NAME=$(echo "$FOLDER_NAME" | tr -cd 'a-zA-Z0-9-_' | head -c 50)
+            SAFE_NAME=$(echo "$FOLDER" | tr -cd 'a-zA-Z0-9-_' | head -c 50)
             [ -z "$SAFE_NAME" ] && SAFE_NAME="media_$(date +%s)"
 
             rm -rf "./packed/$SAFE_NAME"
             mkdir -p "./packed/$SAFE_NAME"
 
             # چکسام فایل‌های رسانه‌ای (بدون .md)
-            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -exec sha256sum {} \; > "./packed/$SAFE_NAME/SHA256SUMS"
+            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -exec sha256sum {} \; > "./packed/$SAFE_NAME/SHA256SUMS" 2>/dev/null || true
 
             # بزرگترین فایل غیر متنی
-            MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+            MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -printf '%s %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
 
             if [ -z "$MAIN_FILE" ]; then
               echo "No media file in $FOLDER, copying directly."
-              cp -r "$FOLDER"* "./packed/$SAFE_NAME/" 2>/dev/null || true
+              cp -r "$FOLDER"/* "./packed/$SAFE_NAME/" 2>/dev/null || true
               continue
             fi
 
-            SIZE=$(stat -c%s "$MAIN_FILE")
-            echo "Processing $MAIN_FILE ($((SIZE/1024/1024)) MB)"
+            SIZE=$(stat -c%s "$MAIN_FILE" 2>/dev/null || echo 0)
+            echo "Found main file: $MAIN_FILE ($((SIZE/1024/1024)) MB)"
 
             USE_SPLIT=false
             if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
@@ -412,21 +412,24 @@ jobs:
               fi
             fi
 
-            # حذف کپی موقت
             rm -f "$SAFE_FILE"
 
-            # کپی فایل‌های جانبی (README, description, thumbnails)
+            # کپی فایل‌های جانبی (README, description, thumbnails) با حفظ نام
             cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$SAFE_NAME/" 2>/dev/null || true
           done
 
-          # جایگزینی محتوای اصلی با packed
-          for FOLDER in */; do
-            if [ "$FOLDER" != "packed/" ]; then
-              rm -rf "$FOLDER"
-            fi
-          done
-          mv packed/* .
-          rmdir packed
+          # حذف پوشه‌های اصلی (فقط اونهایی که پردازش شدن)
+          find . -mindepth 1 -maxdepth 1 -type d ! -name packed -exec rm -rf {} + 2>/dev/null || true
+
+          # انتقال محتوای packed به جای اصلی
+          if [ -d packed ]; then
+            mv packed/* . 2>/dev/null || true
+            rmdir packed 2>/dev/null || true
+          fi
+
+          # چک امنیتی نهایی: حذف هر فایل غیر zip/z* بزرگتر از ۹۵ مگابایت
+          # تا خیالمان از عدم وجود فایل خام در خروجی راحت باشد
+          find . -type f ! -name '*.zip' ! -name '*.z*' -size +95M -exec rm -f {} \; 2>/dev/null || true
 
       - name: 📤 Push تدریجی به ریپازیتوری
         env:

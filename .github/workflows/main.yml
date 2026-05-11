@@ -1,38 +1,49 @@
-name: "🎬 Universal Media Downloader (Repo Storage)"
+name: "🎬 Universal Media Downloader (Final Stable)"
 
 on:
   workflow_dispatch:
     inputs:
-      # ===== حالت دانلود =====
+      # ████████████████████████████████████████████
+      # ۱. حالت دانلود و لینک
+      # ████████████████████████████████████████████
       download_video:
         description: "✅ تیک بزنید → ویدیو | ❌ خالی → صوت"
         type: boolean
         default: true
 
       url:
-        description: "🔗 لینک ویدیو/صوت"
+        description: "🔗 لینک ویدیو/صوت (الزامی)"
         type: string
         required: true
 
       cookies:
-        description: "🍪 محتوای کوکی (Netscape) - اختیاری"
+        description: "🍪 محتوای کوکی (Netscape format) - اختیاری"
         type: string
         default: ""
 
-      # ===== نام‌های سفارشی =====
+      # ████████████████████████████████████████████
+      # ۲. نام‌های سفارشی (برای پوشه و فایل نهایی)
+      # ████████████████████████████████████████████
       custom_folder:
-        description: "📁 نام پوشه ذخیره (اختیاری - جای عنوان خودکار)"
+        description: "📁 نام پوشهٔ ذخیره (اختیاری | جای عنوان خودکار)"
         type: string
         default: ""
 
       custom_filename:
-        description: "📄 نام فایل (بدون پسوند) (اختیاری)"
+        description: "📄 نام فایل نهایی بدون پسوند (اختیاری)"
         type: string
         default: ""
 
-      # ===== گزینه‌های عمومی =====
+      # ████████████████████████████████████████████
+      # ۳. گزینه‌های پیشرفتهٔ yt‑dlp
+      # ████████████████████████████████████████████
       list_supported_sites:
-        description: "📋 لیست سایت‌های پشتیبانی‌شده (txt)"
+        description: "📋 نمایش فهرست سایت‌های پشتیبانی‌شده (خروجی txt)"
+        type: boolean
+        default: false
+
+      list_formats:
+        description: "📊 فقط نمایش فرمت‌های موجود (بدون دانلود)"
         type: boolean
         default: false
 
@@ -42,43 +53,25 @@ on:
         default: "30"
 
       retries:
-        description: "🔁 تعداد تلاش مجدد (۱-۱۰)"
+        description: "🔁 تعداد تلاش مجدد (۱ تا ۱۰)"
         type: number
         default: 10
 
       fragment_retries:
-        description: "🔂 تلاش مجدد برای هر قطعه (۱-۱۰)"
+        description: "🔂 تلاش مجدد برای هر قطعه (۱ تا ۱۰)"
         type: number
         default: 10
 
       extractor_retries:
-        description: "🛠 تلاش مجدد در خطای دسترسی (۱-۱۰)"
+        description: "🛠 تلاش مجدد در خطای دسترسی (۱ تا ۱۰)"
         type: number
         default: 3
 
-      # ===== گزینه‌های ویدیو =====
-      embed_metadata:
-        description: "🏷 درج متادیتا در فایل (ویدیو/صوت)"
-        type: boolean
-        default: false
-
-      write_description:
-        description: "📝 ذخیره توضیحات (فقط ویدیو)"
-        type: boolean
-        default: false
-
-      write_all_thumbnails:
-        description: "🖼 ذخیره تمام تصاویر بندانگشتی (فقط ویدیو)"
-        type: boolean
-        default: false
-
-      list_formats:
-        description: "📊 فقط نمایش فرمت‌ها (بدون دانلود)"
-        type: boolean
-        default: false
-
+      # ████████████████████████████████████████████
+      # ۴. تنظیمات ویدیو
+      # ████████████████████████████████████████████
       format_choice:
-        description: "🎞 فرمت ویدیو (custom = ورودی دلخواه)"
+        description: "🎞 فرمت ویدیو (custom = دلخواه)"
         type: choice
         options:
           - best
@@ -89,13 +82,30 @@ on:
         default: "best"
 
       custom_format:
-        description: "✏ فرمت دلخواه (اگر custom)"
+        description: "✏ فرمت دلخواه (اگر custom انتخاب شود)"
         type: string
         default: ""
 
-      # ===== گزینه‌های صوت =====
+      embed_metadata:
+        description: "🏷 نوشتن متادیتا در فایل"
+        type: boolean
+        default: false
+
+      write_description:
+        description: "📝 ذخیرهٔ توضیحات (فقط ویدیو)"
+        type: boolean
+        default: false
+
+      write_all_thumbnails:
+        description: "🖼 ذخیرهٔ تمام تصاویر بندانگشتی (فقط ویدیو)"
+        type: boolean
+        default: false
+
+      # ████████████████████████████████████████████
+      # ۵. تنظیمات صوت
+      # ████████████████████████████████████████████
       audio_quality_choice:
-        description: "🎵 کیفیت صدا (best / kbps / custom)"
+        description: "🎵 کیفیت صدا (best یا عدد kbps یا custom)"
         type: choice
         options:
           - best
@@ -108,12 +118,12 @@ on:
         default: "best"
 
       custom_audio_quality:
-        description: "✏ کیفیت دلخواه (اگر custom)"
+        description: "✏ کیفیت دلخواه (اگر custom انتخاب شود)"
         type: string
         default: ""
 
       audio_format_choice:
-        description: "🎧 فرمت صدا (best / mp3 / m4a / ...)"
+        description: "🎧 فرمت خروجی صدا (best یا فرمت دلخواه)"
         type: choice
         options:
           - best
@@ -128,7 +138,7 @@ on:
         default: "best"
 
       custom_audio_format:
-        description: "✏ فرمت صوتی دلخواه (اگر custom)"
+        description: "✏ فرمت صوتی دلخواه (اگر custom انتخاب شود)"
         type: string
         default: ""
 
@@ -137,19 +147,21 @@ on:
         type: boolean
         default: false
 
-      # ===== گزینه‌های تقسیم و فشرده‌سازی =====
+      # ████████████████████████████████████████████
+      # ۶. تقسیم، فشرده‌سازی و رمز
+      # ████████████████████████████████████████████
       split_parts:
         description: "🔢 تعداد تکه‌ها (۱ = بدون تقسیم)"
         type: number
         default: 1
 
       max_part_size_mb:
-        description: "📦 حداکثر حجم هر تکه (MB) - خالی = تقسیم بر اساس تعداد"
+        description: "📦 حداکثر حجم هر تکه (MB) | خالی = تقسیم بر اساس تعداد"
         type: string
         default: ""
 
       compression_level:
-        description: "🗜 سطح فشرده‌سازی (۱ تا ۹) - پیش‌فرض ۶"
+        description: "🗜 سطح فشرده‌سازی (۱ تا ۹) | پیش‌فرض ۶"
         type: number
         default: 6
 
@@ -172,7 +184,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: ⚙️ پیکربندی گیت
+      - name: ⚙️ پیکربندی گیت برای فایل‌های حجیم
         run: |
           git config --global http.postBuffer 524288000
           git config --global http.maxRequestBuffer 100M
@@ -185,8 +197,8 @@ jobs:
 
       - name: 🧹 پاکسازی پوشه‌های قبلی
         run: |
-          rm -rf VIDEO AUDIO
-          echo "Old media folders cleaned."
+          rm -rf VIDEO AUDIO raw_files
+          echo "Old folders cleaned."
 
       - name: 📦 نصب وابستگی‌ها
         run: |
@@ -194,36 +206,31 @@ jobs:
           sudo apt-get install -y ffmpeg aria2 zip curl bc
           pip install -q yt-dlp
 
-      - name: 🧠 آماده‌سازی متغیرها
+      # ─────────────────────────────────────────────
+      - name: 🧠 آماده‌سازی متغیرها و مسیرها
         id: vars
         run: |
           echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
           echo "REPO_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
           echo "BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
 
-          BACKUP_DIR="/tmp/download_backup_$$"
-          mkdir -p "$BACKUP_DIR"
-          echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
-
           if [ "${{ inputs.download_video }}" = "true" ]; then
             MODE="video"
-            ROOT_FOLDER="VIDEO"
+            ROOT="VIDEO"
           else
             MODE="audio"
-            ROOT_FOLDER="AUDIO"
+            ROOT="AUDIO"
           fi
           echo "MODE=$MODE" >> $GITHUB_ENV
-          echo "ROOT_FOLDER=$ROOT_FOLDER" >> $GITHUB_ENV
+          echo "ROOT_FOLDER=$ROOT" >> $GITHUB_ENV
 
-          # پارامترهای تقسیم و فشرده‌سازی
+          # پارامترهای تقسیم
           SPLIT_PARTS=${{ inputs.split_parts }}
           MAX_PART_SIZE_MB="${{ inputs.max_part_size_mb }}"
           COMPRESSION_LEVEL=${{ inputs.compression_level }}
           ZIP_PASSWORD="${{ inputs.zip_password }}"
-
           [ "$SPLIT_PARTS" -lt 1 ] && SPLIT_PARTS=1
           [ "$COMPRESSION_LEVEL" -lt 1 ] || [ "$COMPRESSION_LEVEL" -gt 9 ] && COMPRESSION_LEVEL=6
-
           echo "SPLIT_PARTS=$SPLIT_PARTS" >> $GITHUB_ENV
           echo "MAX_PART_SIZE_MB=$MAX_PART_SIZE_MB" >> $GITHUB_ENV
           echo "COMPRESSION_LEVEL=$COMPRESSION_LEVEL" >> $GITHUB_ENV
@@ -235,22 +242,14 @@ jobs:
           echo "CUSTOM_FOLDER=$CUSTOM_FOLDER" >> $GITHUB_ENV
           echo "CUSTOM_FILENAME=$CUSTOM_FILENAME" >> $GITHUB_ENV
 
-          # ساخت الگوی خروجی
-          if [ -n "$CUSTOM_FOLDER" ] && [ -n "$CUSTOM_FILENAME" ]; then
-            OUT="${ROOT_FOLDER}/${CUSTOM_FOLDER}/${CUSTOM_FILENAME}.%(ext)s"
-          elif [ -n "$CUSTOM_FOLDER" ]; then
-            OUT="${ROOT_FOLDER}/${CUSTOM_FOLDER}/%(title)s.%(ext)s"
-          elif [ -n "$CUSTOM_FILENAME" ]; then
-            OUT="${ROOT_FOLDER}/%(title)s/${CUSTOM_FILENAME}.%(ext)s"
-          else
-            if [ "$MODE" = "video" ]; then
-              OUT="VIDEO/%(title)s/%(title)s.%(ext)s"
-            else
-              OUT="AUDIO/%(title)s/%(title)s.%(ext)s"
-            fi
-          fi
-          echo "OUTPUT_TEMPLATE=$OUT" >> $GITHUB_ENV
+          BACKUP_DIR="/tmp/backup_$$"
+          mkdir -p "$BACKUP_DIR"
+          echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
 
+          # الگوی خروجی yt‑dlp (تخت، داخل raw_files/)
+          echo "YT_OUTPUT=raw_files/%(title)s.%(ext)s" >> $GITHUB_ENV
+
+      # ─────────────────────────────────────────────
       - name: 📋 لیست سایت‌های پشتیبانی (در صورت درخواست)
         if: inputs.list_supported_sites == 'true'
         run: |
@@ -259,15 +258,16 @@ jobs:
 
       - name: 📊 نمایش فرمت‌های موجود (در صورت درخواست)
         if: inputs.list_formats == 'true'
-        run: |
-          yt-dlp -F "${{ inputs.url }}" || echo "⚠️ دریافت فرمت‌ها ممکن نیست"
+        run: yt-dlp -F "${{ inputs.url }}" || echo "⚠️ دریافت فرمت‌ها ممکن نیست"
         continue-on-error: true
 
+      # ─────────────────────────────────────────────
       - name: ⬇️ دانلود با yt‑dlp
         if: inputs.list_formats != 'true'
         run: |
+          mkdir -p raw_files
           URL="${{ inputs.url }}"
-          CMD="yt-dlp --no-mtime --socket-timeout ${{ inputs.connect_timeout }} --retries ${{ inputs.retries }} --fragment-retries ${{ inputs.fragment_retries }} --extractor-retries ${{ inputs.extractor_retries }} --output \"$OUTPUT_TEMPLATE\""
+          CMD="yt-dlp --no-mtime --socket-timeout ${{ inputs.connect_timeout }} --retries ${{ inputs.retries }} --fragment-retries ${{ inputs.fragment_retries }} --extractor-retries ${{ inputs.extractor_retries }} --output \"$YT_OUTPUT\""
           CMD="$CMD --user-agent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\""
           CMD="$CMD --add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\""
           CMD="$CMD --add-header \"Accept-Language: en-US,en;q=0.5\""
@@ -286,10 +286,10 @@ jobs:
 
           if [ "$MODE" = "video" ]; then
             case "${{ inputs.format_choice }}" in
-              custom) FORMAT="${{ inputs.custom_format }}" ;;
-              *)      FORMAT="${{ inputs.format_choice }}" ;;
+              custom) FMT="${{ inputs.custom_format }}" ;;
+              *)      FMT="${{ inputs.format_choice }}" ;;
             esac
-            CMD="$CMD --format \"$FORMAT\""
+            CMD="$CMD --format \"$FMT\""
             [ "${{ inputs.embed_metadata }}" = "true" ]      && CMD="$CMD --embed-metadata"
             [ "${{ inputs.write_description }}" = "true" ]   && CMD="$CMD --write-description"
             [ "${{ inputs.write_all_thumbnails }}" = "true" ] && CMD="$CMD --write-all-thumbnails"
@@ -306,55 +306,24 @@ jobs:
               *)      AQ="${{ inputs.audio_quality_choice }}" ;;
             esac
             CMD="$CMD --audio-quality $AQ"
-            [ "${{ inputs.embed_metadata }}" = "true" ]   && CMD="$CMD --embed-metadata"
-            [ "${{ inputs.embed_thumbnail }}" = "true" ]  && CMD="$CMD --embed-thumbnail"
+            [ "${{ inputs.embed_metadata }}" = "true" ]  && CMD="$CMD --embed-metadata"
+            [ "${{ inputs.embed_thumbnail }}" = "true" ] && CMD="$CMD --embed-thumbnail"
           fi
 
           CMD="$CMD \"$URL\""
           echo "▶️ $CMD"
           eval $CMD
 
-          mkdir -p "$BACKUP_DIR"
-          if [ -d "VIDEO" ]; then
-            cp -r VIDEO/* "$BACKUP_DIR" 2>/dev/null || true
-          fi
-          if [ -d "AUDIO" ]; then
-            cp -r AUDIO/* "$BACKUP_DIR" 2>/dev/null || true
-          fi
-
-      - name: 📖 ایجاد READMEهای استاتیک
+      # ─────────────────────────────────────────────
+      - name: 📖 ایجاد READMEهای استاتیک برای هر فایل
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
-          find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' FOLDER; do
-            FOLDER_NAME=$(basename "$FOLDER")
-            cat > "$FOLDER/README.md" << EOF
-          # 🎬 $FOLDER_NAME
+          # این مرحله بعد از پردازش اصلی می‌آید، اما فعلاً خالی است
+          # READMEها همراه با process_file ساخته می‌شوند.
+        continue-on-error: true
 
-          Downloaded with Universal Media Downloader (yt‑dlp).
-
-          ## How to Use
-          1. Download all parts (if split).
-          2. Open the main \`.zip\` file with any archive manager.
-          3. Extract.
-
-          *Powered by yt‑dlp*
-          EOF
-
-            cat > "$FOLDER/README_FA.md" << EOF
-          # 🎬 $FOLDER_NAME
-
-          دانلود شده با دانلودر جهانی.
-
-          ## روش استفاده
-          1. تمام بخش‌ها را دانلود کنید.
-          2. فایل \`.zip\` اصلی را باز کنید.
-          3. استخراج نمایید.
-
-          *نیرو گرفته از yt‑dlp*
-          EOF
-          done
-
-      - name: 📦 بسته‌بندی و تقسیم (بر اساس نام‌های سفارشی)
+      # ─────────────────────────────────────────────
+      - name: 📦 بسته‌بندی، تقسیم و ایجاد README
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           SPLIT_PARTS=${{ env.SPLIT_PARTS }}
@@ -363,97 +332,154 @@ jobs:
           ZIP_PASSWORD="${{ env.ZIP_PASSWORD }}"
           CUSTOM_FOLDER="${{ env.CUSTOM_FOLDER }}"
           CUSTOM_FILENAME="${{ env.CUSTOM_FILENAME }}"
+          MODE="${{ env.MODE }}"
+          REPO_OWNER="${{ env.REPO_OWNER }}"
+          REPO_NAME="${{ env.REPO_NAME }}"
+          BRANCH="${{ env.BRANCH }}"
 
-          FINAL_DIR="${BACKUP_DIR}_final"
-          rm -rf "$FINAL_DIR"
-          mkdir -p "$FINAL_DIR"
+          # توابع کمکی
+          urlencode() {
+            python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+          }
 
-          cd "$BACKUP_DIR"
+          get_safe_name() {
+            local raw="$1"
+            local safe
+            safe=$(echo "$raw" | tr -cd 'a-zA-Z0-9-_' | head -c 50)
+            [ -z "$safe" ] && safe="media_$(date +%s)"
+            echo "$safe"
+          }
 
-          find . -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' FOLDER; do
-            FOLDER_NAME=$(basename "$FOLDER")
-            [ "$FOLDER_NAME" = ".." ] && continue
-            [ "$FOLDER_NAME" = "." ] && continue
+          cd raw_files
 
-            echo "Processing: $FOLDER_NAME"
+          # پیدا کردن فایل اصلی (بزرگترین فایل غیر json/md/txt/zip)
+          MAIN=$(find . -maxdepth 1 -type f ! -name "*.md" ! -name "*.json" ! -name "*.zip" ! -name "*.z*" -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+          if [ -z "$MAIN" ]; then
+            echo "❌ هیچ فایل رسانه‌ای در raw_files پیدا نشد!"
+            exit 1
+          fi
+          echo "فایل اصلی: $MAIN"
 
-            # تعیین نام نهایی (اولویت با نام سفارشی)
-            if [ -n "$CUSTOM_FOLDER" ]; then
-              SAFE_NAME=$(echo "$CUSTOM_FOLDER" | tr -cd 'a-zA-Z0-9-_' | head -c 50)
+          # تعیین نام پوشهٔ نهایی
+          if [ -n "$CUSTOM_FOLDER" ]; then
+            FOLDER_NAME=$(get_safe_name "$CUSTOM_FOLDER")
+          else
+            BASE=$(basename "$MAIN" | sed 's/\.[^.]*$//')
+            FOLDER_NAME=$(get_safe_name "$BASE")
+          fi
+
+          FINAL="$BACKUP_DIR/$FOLDER_NAME"
+          mkdir -p "$FINAL"
+
+          # چکسام فایل اصلی
+          sha256sum "$MAIN" > "$FINAL/SHA256SUMS"
+
+          # اندازهٔ فایل اصلی
+          SIZE=$(stat -c%s "$MAIN")
+          echo "حجم: $((SIZE/1024/1024)) MB"
+
+          # تعیین روش تقسیم
+          USE_SPLIT=false
+          if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
+            SPLIT_SIZE="$MAX_PART_SIZE_MB"
+            USE_SPLIT=true
+          elif [ "$SPLIT_PARTS" -gt 1 ]; then
+            SPLIT_SIZE=$(echo "($SIZE + $SPLIT_PARTS - 1) / $SPLIT_PARTS / 1048576 + 1" | bc)
+            USE_SPLIT=true
+          fi
+
+          # نام فایل داخل zip (در صورت وجود CUSTOM_FILENAME)
+          if [ -n "$CUSTOM_FILENAME" ]; then
+            EXT="${MAIN##*.}"
+            INSIDE_NAME="${CUSTOM_FILENAME}.${EXT}"
+          else
+            INSIDE_NAME=$(basename "$MAIN")
+          fi
+
+          # کپی با نام موقت امن
+          SAFE_TMP="$FINAL/media_file"
+          cp "$MAIN" "$SAFE_TMP"
+
+          if [ "$USE_SPLIT" = true ] && [ "$SIZE" -gt 1048576 ]; then
+            echo "تقسیم به قطعات ${SPLIT_SIZE}MB"
+            ARCHIVE_BASE="$FINAL/${FOLDER_NAME}"
+            if [ -n "$ZIP_PASSWORD" ]; then
+              zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$SAFE_TMP"
             else
-              SAFE_NAME=$(echo "$FOLDER_NAME" | tr -cd 'a-zA-Z0-9-_' | head -c 50)
+              zip -j -${COMPRESSION_LEVEL} -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$SAFE_TMP"
             fi
-            [ -z "$SAFE_NAME" ] && SAFE_NAME="media_$(date +%s)"
-
-            mkdir -p "$FINAL_DIR/$SAFE_NAME"
-
-            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -exec sha256sum {} \; > "$FINAL_DIR/$SAFE_NAME/SHA256SUMS" 2>/dev/null || true
-
-            MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -printf '%s %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
-
-            if [ -z "$MAIN_FILE" ]; then
-              echo "No media file, copying everything."
-              cp -r "$FOLDER"/* "$FINAL_DIR/$SAFE_NAME/" 2>/dev/null || true
-              continue
-            fi
-
-            SIZE=$(stat -c%s "$MAIN_FILE" 2>/dev/null || echo 0)
-            echo "Main file size: $((SIZE/1024/1024)) MB"
-
-            USE_SPLIT=false
-            if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
-              SPLIT_SIZE="$MAX_PART_SIZE_MB"
-              USE_SPLIT=true
-            elif [ "$SPLIT_PARTS" -gt 1 ]; then
-              SPLIT_SIZE=$(echo "($SIZE + $SPLIT_PARTS - 1) / $SPLIT_PARTS / 1048576 + 1" | bc)
-              USE_SPLIT=true
-            fi
-
-            if [ "$SIZE" -lt 1048576 ] && [ "$USE_SPLIT" = true ]; then
-              USE_SPLIT=false
-            fi
-
-            # نام فایل داخل archive (اگر custom_filename داده شده باشه)
-            if [ -n "$CUSTOM_FILENAME" ]; then
-              INSIDE_NAME="${CUSTOM_FILENAME}.${MAIN_FILE##*.}"
+          else
+            if [ -n "$ZIP_PASSWORD" ]; then
+              zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" "$FINAL/${FOLDER_NAME}.zip" "$SAFE_TMP"
             else
-              INSIDE_NAME=$(basename "$MAIN_FILE")
+              zip -j -${COMPRESSION_LEVEL} "$FINAL/${FOLDER_NAME}.zip" "$SAFE_TMP"
             fi
+          fi
 
-            SAFE_FILE="$FINAL_DIR/$SAFE_NAME/media_file"
-            cp "$MAIN_FILE" "$SAFE_FILE"
+          rm -f "$SAFE_TMP"
 
-            if [ "$USE_SPLIT" = true ]; then
-              echo "Splitting into ${SPLIT_SIZE} MB parts"
-              ARCHIVE_BASE="$FINAL_DIR/$SAFE_NAME/${SAFE_NAME}"
-              # برای حفظ نام داخل zip، فایل موقت رو به نام اصلی تغییر می‌دیم
-              mv "$SAFE_FILE" "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-              if [ -n "$ZIP_PASSWORD" ]; then
-                zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-              else
-                zip -j -${COMPRESSION_LEVEL} -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-              fi
-              rm -f "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-            else
-              mv "$SAFE_FILE" "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-              if [ -n "$ZIP_PASSWORD" ]; then
-                zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" "$FINAL_DIR/$SAFE_NAME/${SAFE_NAME}.zip" "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-              else
-                zip -j -${COMPRESSION_LEVEL} "$FINAL_DIR/$SAFE_NAME/${SAFE_NAME}.zip" "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-              fi
-              rm -f "$FINAL_DIR/$SAFE_NAME/$INSIDE_NAME"
-            fi
+          # کپی فایل‌های جانبی (thumbnail, description, json, و غیره)
+          find . -maxdepth 1 -type f ! -name "*.zip" ! -name "*.z*" ! -name "$(basename "$MAIN")" -exec cp {} "$FINAL/" \; 2>/dev/null || true
 
-            cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "$FINAL_DIR/$SAFE_NAME/" 2>/dev/null || true
-          done
+          # ایجاد README
+          cat > "$FINAL/README.md" << EOF
+        # $FOLDER_NAME
 
-          # بازنویسی کامل محتوای BACKUP_DIR
-          rm -rf "$BACKUP_DIR"
-          mv "$FINAL_DIR" "$BACKUP_DIR"
+        Downloaded with Universal Media Downloader (yt‑dlp).
 
-          # حذف فایل‌های غیر zip بزرگتر از ۹۵ مگابایت (ضد اشتباه)
-          find "$BACKUP_DIR" -type f ! -name '*.zip' ! -name '*.z*' -size +95M -exec rm -f {} \; 2>/dev/null || true
+        - Original file: \`$(basename "$MAIN")\`
+        - Mode: $MODE
+        - Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - Password: $([ -n "$ZIP_PASSWORD" ] && echo "YES" || echo "NO")
+        - Compression: $COMPRESSION_LEVEL
+        - Parts: $(ls "$FINAL"/*.zip "$FINAL"/*.z* 2>/dev/null | wc -l)
 
+        ## Download
+        $(for part in "$FINAL"/*.zip "$FINAL"/*.z*; do
+          name=$(basename "$part")
+          link="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/${ROOT_FOLDER}/${FOLDER_NAME}/$(urlencode "$name")"
+          echo "- [\`$name\`]($link)"
+        done)
+
+        ## Extract
+        1. Download all parts.
+        2. Open \`${FOLDER_NAME}.zip\` with WinRAR, 7‑Zip, Ark, etc.
+        3. Extract – parts combine automatically.
+        $([ -n "$ZIP_PASSWORD" ] && echo "4. Enter the password when prompted.")
+        EOF
+
+          cat > "$FINAL/README_FA.md" << EOF
+        # $FOLDER_NAME
+
+        دانلود شده با دانلودر جهانی.
+
+        - فایل اصلی: \`$(basename "$MAIN")\`
+        - حالت: $MODE
+        - تاریخ: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - رمز: $([ -n "$ZIP_PASSWORD" ] && echo "بله" || echo "خیر")
+        - فشرده‌سازی: سطح $COMPRESSION_LEVEL
+        - تعداد بخش‌ها: $(ls "$FINAL"/*.zip "$FINAL"/*.z* 2>/dev/null | wc -l)
+
+        ## لینک دانلود
+        $(for part in "$FINAL"/*.zip "$FINAL"/*.z*; do
+          name=$(basename "$part")
+          link="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/${ROOT_FOLDER}/${FOLDER_NAME}/$(urlencode "$name")"
+          echo "- [\`$name\`]($link)"
+        done)
+
+        ## روش استخراج
+        1. تمام بخش‌ها را دانلود کنید.
+        2. فایل \`${FOLDER_NAME}.zip\` را با WinRAR یا 7‑Zip باز کنید.
+        3. استخراج کنید – بخش‌ها خودکار ترکیب می‌شوند.
+        $([ -n "$ZIP_PASSWORD" ] && echo "4. رمز عبور را وارد کنید.")
+        EOF
+
+          # پاکسازی raw_files (اختیاری)
+          rm -f "$MAIN"  # فایل اصلی حذف می‌شود (نسخهٔ zip شده موجود است)
+
+          echo "پوشهٔ نهایی: $FINAL"
+
+      # ─────────────────────────────────────────────
       - name: 📤 Push تدریجی به ریپازیتوری
         env:
           BACKUP_DIR: ${{ env.BACKUP_DIR }}
@@ -461,20 +487,21 @@ jobs:
           BRANCH: ${{ env.BRANCH }}
         run: |
           BACKUP_DIR="${BACKUP_DIR}"
-          ROOT_FOLDER="${ROOT_FOLDER}"
+          ROOT="${ROOT_FOLDER}"
           BRANCH="${BRANCH}"
 
           git fetch origin "$BRANCH"
           git reset --hard origin/"$BRANCH"
 
-          mkdir -p "$ROOT_FOLDER"
-          cp -r "$BACKUP_DIR"/* "$ROOT_FOLDER/" 2>/dev/null || true
+          mkdir -p "$ROOT"
+          cp -r "$BACKUP_DIR"/* "$ROOT/" 2>/dev/null || true
 
-          ALL_FILES=()
-          while IFS= read -r -d '' f; do ALL_FILES+=("$f"); done < <(find "$ROOT_FOLDER" -type f -print0 | sort -z)
+          # جمع‌آوری همهٔ فایل‌ها
+          mapfile -d '' ALL_FILES < <(find "$ROOT" -type f -print0 | sort -z)
+          echo "تعداد فایل‌های آماده برای push: ${#ALL_FILES[@]}"
 
           if [ ${#ALL_FILES[@]} -eq 0 ]; then
-            echo "Nothing to push."
+            echo "هیچ فایلی برای push وجود ندارد."
             exit 0
           fi
 
@@ -486,14 +513,14 @@ jobs:
               local retry=0
               while [ $retry -lt 5 ]; do
                 if timeout 180 git push origin HEAD:"$BRANCH"; then
-                  echo "Batch pushed successfully."
+                  echo "دسته با موفقیت push شد."
                   return 0
                 else
-                  echo "Push failed, attempt $((retry+1))/5..."
+                  echo "Push ناموفق، تلاش $((retry+1))/5..."
                   sleep $(( RANDOM % 10 + 5 ))
                   git fetch origin "$BRANCH" --quiet
                   if ! git rebase origin/"$BRANCH" --quiet; then
-                    echo "Rebase conflict – aborting batch."
+                    echo "Rebase conflict – لغو دسته."
                     git rebase --abort
                     return 1
                   fi
@@ -508,36 +535,36 @@ jobs:
           for file in "${ALL_FILES[@]}"; do
             batch+=("$file")
             if [ ${#batch[@]} -ge 3 ]; then
-              push_batch "${batch[@]}" || { echo "❌ Push batch failed!"; exit 1; }
+              push_batch "${batch[@]}" || { echo "❌ شکست در push دسته‌ای!"; exit 1; }
               batch=()
             fi
           done
           if [ ${#batch[@]} -gt 0 ]; then
-            push_batch "${batch[@]}" || { echo "❌ Push final batch failed!"; exit 1; }
+            push_batch "${batch[@]}" || { echo "❌ شکست در push دستهٔ آخر!"; exit 1; }
           fi
 
-          # به‌روزرسانی README اصلی
+          # به‌روزرسانی README اصلی ریپو
           git fetch origin "$BRANCH"
           git rebase origin/"$BRANCH" --quiet 2>/dev/null || git rebase --abort
-          mkdir -p "$ROOT_FOLDER"
-          cp -r "$BACKUP_DIR"/* "$ROOT_FOLDER/" 2>/dev/null || true
+          mkdir -p "$ROOT"
+          cp -r "$BACKUP_DIR"/* "$ROOT/" 2>/dev/null || true
 
-          FOLDERS=$(find "$ROOT_FOLDER" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+          FOLDERS=$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
           {
             echo ""
-            echo "## 📁 فایل‌های دانلود شده اخیر"
+            echo "## 📁 فایل‌های دانلود شدهٔ اخیر"
             echo ""
             for f in $FOLDERS; do
-              echo "- [$f](./$ROOT_FOLDER/$f/)"
+              echo "- [$f](./$ROOT/$f/)"
             done
             echo ""
             echo "---"
           } >> README.md
 
-          git add README.md "$ROOT_FOLDER"
+          git add README.md "$ROOT"
           if ! git diff --cached --quiet; then
             git commit -m "[Bot] Update README with latest downloads [skip ci]"
             timeout 180 git push origin HEAD:"$BRANCH" || echo "⚠️ README push timed out but files are safe."
           fi
 
-          echo "✅ All files pushed to $ROOT_FOLDER in the repository."
+          echo "✅ تمام فایل‌ها در پوشهٔ $ROOT ریپازیتوری ذخیره شدند."

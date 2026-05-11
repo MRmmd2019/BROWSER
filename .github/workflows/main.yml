@@ -333,7 +333,7 @@ jobs:
           EOF
           done
 
-      - name: 📦 بسته‌بندی و تقسیم فایل‌های حجیم
+      - name: 📦 بسته‌بندی و تقسیم فایل‌های حجیم (نسخه امن)
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           THRESHOLD_MB="${{ env.SPLIT_THRESHOLD_MB }}"
@@ -344,45 +344,70 @@ jobs:
           for FOLDER in */; do
             [ -d "$FOLDER" ] || continue
             FOLDER_NAME=$(basename "$FOLDER")
-            mkdir -p "./packed/$FOLDER_NAME"
-            # محاسبه چکسام برای همه فایل‌ها
-            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -exec sha256sum {} \; > "./packed/$FOLDER_NAME/SHA256SUMS"
-            # پیدا کردن فایل اصلی (بزرگترین فایل غیر zip)
+
+            # ایجاد یک نام امن برای آرشیو (فقط حروف، اعداد و خط تیره)
+            SAFE_NAME=$(echo "$FOLDER_NAME" | tr -cd '[:alnum:]-_' | head -c 50)
+            [ -z "$SAFE_NAME" ] && SAFE_NAME="media_$(date +%s)"
+
+            mkdir -p "./packed/$SAFE_NAME"
+
+            # چکسام همه فایل‌های غیر zip در پوشه اصلی
+            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -exec sha256sum {} \; > "./packed/$SAFE_NAME/SHA256SUMS"
+
+            # پیدا کردن بزرگترین فایل غیر zip
             MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
             if [ -z "$MAIN_FILE" ]; then
               echo "No main file in $FOLDER, skipping."
               continue
             fi
+
             SIZE=$(stat -c%s "$MAIN_FILE")
-            BASENAME=$(basename "$MAIN_FILE")
+            echo "Processing $MAIN_FILE ($((SIZE/1024/1024)) MB)"
+
             if [ "$SIZE" -gt "$THRESHOLD_BYTES" ]; then
-              echo "Splitting $BASENAME ($((SIZE/1024/1024)) MB)"
-              ARCHIVE_BASE="./packed/$FOLDER_NAME/${FOLDER_NAME}"
+              # کپی فایل با نام امن به مکان موقت
+              SAFE_FILE="./packed/$SAFE_NAME/media_file"
+              cp "$MAIN_FILE" "$SAFE_FILE"
+
+              ARCHIVE_BASE="./packed/$SAFE_NAME/${SAFE_NAME}"
               if [ -n "$ZIP_PASSWORD" ]; then
-                zip -j -P "$ZIP_PASSWORD" -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$MAIN_FILE"
+                zip -j -P "$ZIP_PASSWORD" -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
               else
-                zip -j -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$MAIN_FILE"
+                zip -j -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
+              fi
+
+              # بررسی موفقیت split
+              if compgen -G "./packed/$SAFE_NAME/${SAFE_NAME}.zip" > /dev/null || compgen -G "./packed/$SAFE_NAME/${SAFE_NAME}.z01" > /dev/null; then
+                echo "Split successful for $MAIN_FILE"
+                rm -f "$SAFE_FILE"  # حذف کپی موقت
+              else
+                echo "❌ Split failed for $MAIN_FILE – will keep as single file but push may fail if >100MB"
+                # اگر split شکست خورد، فایل اصلی را در packed قرار می‌دهیم
+                cp "$MAIN_FILE" "./packed/$SAFE_NAME/${SAFE_NAME}.mp4"
+                rm -f "$SAFE_FILE"
               fi
             else
-              # فایل کوچک، فقط زیپ ساده
+              # فایل کوچک: فقط zip ساده
+              SAFE_FILE="./packed/$SAFE_NAME/media_file"
+              cp "$MAIN_FILE" "$SAFE_FILE"
               if [ -n "$ZIP_PASSWORD" ]; then
-                zip -j -P "$ZIP_PASSWORD" "./packed/$FOLDER_NAME/${FOLDER_NAME}.zip" "$MAIN_FILE"
+                zip -j -P "$ZIP_PASSWORD" "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
               else
-                zip -j "./packed/$FOLDER_NAME/${FOLDER_NAME}.zip" "$MAIN_FILE"
+                zip -j "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
               fi
+              rm -f "$SAFE_FILE"
             fi
-            # کپی READMEها و فایل‌های جانبی (مانند description, thumbnail) به پوشه packed
-            cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$FOLDER_NAME/" 2>/dev/null || true
+
+            # کپی فایل‌های جانبی (README, description, thumbnails)
+            cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$SAFE_NAME/" 2>/dev/null || true
           done
 
-          # ✅ اصلاح: ابتدا پوشه‌های اصلی (به غیر از packed) را پاک می‌کنیم
+          # جایگزینی محتوای اصلی با packed (امن)
           for FOLDER in */; do
             if [ "$FOLDER" != "packed/" ]; then
               rm -rf "$FOLDER"
             fi
           done
-
-          # سپس محتوای packed را به جای آن‌ها می‌نشانیم
           mv packed/* .
           rmdir packed
 

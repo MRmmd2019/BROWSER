@@ -1,4 +1,4 @@
-name: "🎬 Universal Media Downloader (Push to Repo)"
+name: "🎬 Universal Media Downloader (Repo Storage)"
 
 on:
   workflow_dispatch:
@@ -166,7 +166,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: ⚙️ پیکربندی گیت برای فایل‌های حجیم
+      - name: ⚙️ پیکربندی گیت
         run: |
           git config --global http.postBuffer 524288000
           git config --global http.maxRequestBuffer 100M
@@ -177,13 +177,18 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+      - name: 🧹 پاکسازی پوشه‌های قبلی
+        run: |
+          rm -rf VIDEO AUDIO
+          echo "Old media folders cleaned."
+
       - name: 📦 نصب وابستگی‌ها
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg aria2 zip curl bc
           pip install -q yt-dlp
 
-      - name: 🧠 آماده‌سازی متغیرها و پوشه‌ها
+      - name: 🧠 آماده‌سازی متغیرها
         id: vars
         run: |
           echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
@@ -204,13 +209,11 @@ jobs:
           echo "MODE=$MODE" >> $GITHUB_ENV
           echo "ROOT_FOLDER=$ROOT_FOLDER" >> $GITHUB_ENV
 
-          # پردازش مقادیر تقسیم
           SPLIT_PARTS=${{ inputs.split_parts }}
           MAX_PART_SIZE_MB="${{ inputs.max_part_size_mb }}"
           COMPRESSION_LEVEL=${{ inputs.compression_level }}
           ZIP_PASSWORD="${{ inputs.zip_password }}"
 
-          # اعتبارسنجی
           if [ "$SPLIT_PARTS" -lt 1 ]; then SPLIT_PARTS=1; fi
           if [ "$COMPRESSION_LEVEL" -lt 1 ] || [ "$COMPRESSION_LEVEL" -gt 9 ]; then COMPRESSION_LEVEL=6; fi
 
@@ -231,13 +234,11 @@ jobs:
           yt-dlp -F "${{ inputs.url }}" || echo "⚠️ دریافت فرمت‌ها ممکن نیست"
         continue-on-error: true
 
-      - name: 🗂 آماده‌سازی الگوی نام فایل
+      - name: 🗂 الگوی نام خروجی
         run: |
           if [ "$MODE" = "video" ]; then
-            FOLDER="VIDEO"
             DEF_TEMPLATE="VIDEO/%(title)s/%(title)s.%(ext)s"
           else
-            FOLDER="AUDIO"
             DEF_TEMPLATE="AUDIO/%(title)s/%(title)s.%(ext)s"
           fi
           if [ "${{ inputs.output_template }}" = "default" ]; then
@@ -306,7 +307,7 @@ jobs:
             cp -r AUDIO/* "$BACKUP_DIR" 2>/dev/null || true
           fi
 
-      - name: 📖 ایجاد READMEهای استاتیک (فارسی و انگلیسی)
+      - name: 📖 ایجاد READMEهای استاتیک
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           for FOLDER in "$BACKUP_DIR"/*/; do
@@ -315,45 +316,31 @@ jobs:
             cat > "$FOLDER/README.md" << EOF
           # 🎬 $FOLDER_NAME
 
-          This media file was downloaded using the **Universal Media Downloader** powered by yt‑dlp.
+          Downloaded with Universal Media Downloader (yt‑dlp).
 
-          ## 📥 How to Use
-          1. Download all file parts if split (`.zip`, `.z01`, ...).
-          2. Open the main \`.zip\` file with any standard archive manager (WinRAR, 7‑Zip, Ark).
-          3. Extract to your desired location.
-          4. (Optional) Verify the included SHA256 checksums.
+          ## How to Use
+          1. Download all parts (if split).
+          2. Open the main \`.zip\` file with any archive manager.
+          3. Extract.
 
-          ## 🛠 Technical Details
-          - **Tool:** yt‑dlp + aria2 + ffmpeg
-          - **Date:** $(date '+%Y-%m-%d %H:%M:%S UTC')
-          - **Mode:** $MODE
-
-          ---
-          *Powered by [yt‑dlp](https://github.com/yt-dlp/yt-dlp)*
+          *Powered by yt‑dlp*
           EOF
 
             cat > "$FOLDER/README_FA.md" << EOF
           # 🎬 $FOLDER_NAME
 
-          این فایل رسانه‌ای توسط **دانلودر جهانی** مبتنی بر yt‑dlp دریافت شده است.
+          دانلود شده با دانلودر جهانی.
 
-          ## 📥 روش استفاده
-          1. تمام بخش‌های فایل را دانلود کنید (اگر چند بخش است).
-          2. فایل \`.zip\` اصلی را با نرم‌افزارهایی مانند WinRAR یا 7‑Zip باز کنید.
-          3. محتوا را استخراج نمایید.
-          4. (اختیاری) چکسام SHA256 ارائه‌شده را بررسی کنید.
+          ## روش استفاده
+          1. تمام بخش‌ها را دانلود کنید.
+          2. فایل \`.zip\` اصلی را باز کنید.
+          3. استخراج نمایید.
 
-          ## 🛠 جزئیات فنی
-          - **ابزار:** yt‑dlp + aria2 + ffmpeg
-          - **تاریخ:** $(date '+%Y-%m-%d %H:%M:%S UTC')
-          - **حالت:** $MODE
-
-          ---
-          *نیرو گرفته از [yt‑dlp](https://github.com/yt-dlp/yt-dlp)*
+          *نیرو گرفته از yt‑dlp*
           EOF
           done
 
-      - name: 📦 بسته‌بندی و تقسیم فایل‌ها (انعطاف‌پذیر)
+      - name: 📦 بسته‌بندی و تقسیم (فوق‌العاده مقاوم)
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           SPLIT_PARTS=${{ env.SPLIT_PARTS }}
@@ -362,41 +349,50 @@ jobs:
           ZIP_PASSWORD="${{ env.ZIP_PASSWORD }}"
 
           cd "$BACKUP_DIR"
+          rm -rf packed
+
           for FOLDER in */; do
             [ -d "$FOLDER" ] || continue
+            [ "$FOLDER" = "packed/" ] && continue
             FOLDER_NAME=$(basename "$FOLDER")
 
-            # نام امن برای آرشیو
-            SAFE_NAME=$(echo "$FOLDER_NAME" | tr -cd '[:alnum:]-_' | head -c 50)
+            # نام امن (فقط حروف، عدد و خط تیره)
+            SAFE_NAME=$(echo "$FOLDER_NAME" | tr -cd 'a-zA-Z0-9-_' | head -c 50)
             [ -z "$SAFE_NAME" ] && SAFE_NAME="media_$(date +%s)"
 
+            rm -rf "./packed/$SAFE_NAME"
             mkdir -p "./packed/$SAFE_NAME"
 
-            # چکسام
-            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -exec sha256sum {} \; > "./packed/$SAFE_NAME/SHA256SUMS"
+            # چکسام فایل‌های رسانه‌ای (بدون .md)
+            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -exec sha256sum {} \; > "./packed/$SAFE_NAME/SHA256SUMS"
 
-            # یافتن فایل اصلی
-            MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+            # بزرگترین فایل غیر متنی
+            MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' ! -name '*.md' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+
             if [ -z "$MAIN_FILE" ]; then
+              echo "No media file in $FOLDER, copying directly."
+              cp -r "$FOLDER"* "./packed/$SAFE_NAME/" 2>/dev/null || true
               continue
             fi
 
             SIZE=$(stat -c%s "$MAIN_FILE")
             echo "Processing $MAIN_FILE ($((SIZE/1024/1024)) MB)"
 
-            # تعیین حالت تقسیم
             USE_SPLIT=false
             if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
-              # تقسیم بر اساس حجم ثابت
               SPLIT_SIZE="$MAX_PART_SIZE_MB"
               USE_SPLIT=true
             elif [ "$SPLIT_PARTS" -gt 1 ]; then
-              # تقسیم بر اساس تعداد
               SPLIT_SIZE=$(echo "($SIZE + $SPLIT_PARTS - 1) / $SPLIT_PARTS / 1048576 + 1" | bc)
               USE_SPLIT=true
             fi
 
-            # کپی با نام امن
+            # اگر فایل کمتر از ۱ مگابایت باشد split نمی‌کنیم
+            if [ "$SIZE" -lt 1048576 ] && [ "$USE_SPLIT" = true ]; then
+              USE_SPLIT=false
+            fi
+
+            # کپی با نام موقت کاملاً امن
             SAFE_FILE="./packed/$SAFE_NAME/media_file"
             cp "$MAIN_FILE" "$SAFE_FILE"
 
@@ -408,18 +404,18 @@ jobs:
               else
                 zip -j -${COMPRESSION_LEVEL} -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
               fi
-              rm -f "$SAFE_FILE"
             else
-              # بدون تقسیم
               if [ -n "$ZIP_PASSWORD" ]; then
                 zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
               else
                 zip -j -${COMPRESSION_LEVEL} "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
               fi
-              rm -f "$SAFE_FILE"
             fi
 
-            # کپی فایل‌های جانبی
+            # حذف کپی موقت
+            rm -f "$SAFE_FILE"
+
+            # کپی فایل‌های جانبی (README, description, thumbnails)
             cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$SAFE_NAME/" 2>/dev/null || true
           done
 

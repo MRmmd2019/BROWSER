@@ -232,8 +232,6 @@ jobs:
         run: |
           URL="${{ inputs.url }}"
           CMD="yt-dlp --no-mtime --socket-timeout ${{ inputs.connect_timeout }} --retries ${{ inputs.retries }} --fragment-retries ${{ inputs.fragment_retries }} --extractor-retries ${{ inputs.extractor_retries }} --output \"$OUTPUT_TEMPLATE\""
-
-          # مرورگرنما کردن درخواست
           CMD="$CMD --user-agent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\""
           CMD="$CMD --add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\""
           CMD="$CMD --add-header \"Accept-Language: en-US,en;q=0.5\""
@@ -242,11 +240,9 @@ jobs:
           CMD="$CMD --add-header \"Sec-Fetch-Site: none\""
           CMD="$CMD --add-header \"Sec-Fetch-User: ?1\""
           CMD="$CMD --referer \"$URL\""
-
           if command -v aria2c &> /dev/null; then
             CMD="$CMD --downloader aria2c"
           fi
-
           if [ -n "${{ inputs.cookies }}" ]; then
             echo "${{ inputs.cookies }}" > cookies.txt
             CMD="$CMD --cookies cookies.txt"
@@ -282,7 +278,6 @@ jobs:
           echo "▶️ $CMD"
           eval $CMD
 
-          # انتقال فایل‌های دانلودشده به backup_dir
           mkdir -p "$BACKUP_DIR"
           if [ -d "VIDEO" ]; then
             cp -r VIDEO/* "$BACKUP_DIR" 2>/dev/null || true
@@ -380,10 +375,16 @@ jobs:
             cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$FOLDER_NAME/" 2>/dev/null || true
           done
 
-          # جایگزینی محتوای backup_dir با packed
-          rm -rf "${BACKUP_DIR:?}"/*/
-          cp -r packed/* "$BACKUP_DIR"/
-          rm -rf packed
+          # ✅ اصلاح: ابتدا پوشه‌های اصلی (به غیر از packed) را پاک می‌کنیم
+          for FOLDER in */; do
+            if [ "$FOLDER" != "packed/" ]; then
+              rm -rf "$FOLDER"
+            fi
+          done
+
+          # سپس محتوای packed را به جای آن‌ها می‌نشانیم
+          mv packed/* .
+          rmdir packed
 
       - name: 📤 Push تدریجی به ریپازیتوری
         env:
@@ -400,11 +401,9 @@ jobs:
           git fetch origin "$BRANCH"
           git reset --hard origin/"$BRANCH"
 
-          # کپی فایل‌ها به پوشه اصلی (VIDEO یا AUDIO)
           mkdir -p "$ROOT_FOLDER"
           cp -r "$BACKUP_DIR"/* "$ROOT_FOLDER/" 2>/dev/null || true
 
-          # ساخت لیست فایل‌ها برای commit تدریجی
           ALL_FILES=()
           while IFS= read -r -d '' f; do ALL_FILES+=("$f"); done < <(find "$ROOT_FOLDER" -type f -print0 | sort -z)
 
@@ -460,7 +459,6 @@ jobs:
           mkdir -p "$ROOT_FOLDER"
           cp -r "$BACKUP_DIR"/* "$ROOT_FOLDER/" 2>/dev/null || true
 
-          # ساخت فهرست در README اصلی (فارسی)
           FOLDERS=$(find "$ROOT_FOLDER" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
           {
             echo ""

@@ -87,7 +87,11 @@ jobs:
           }
 
           (async () => {
-            const browser = await chromium.launch();
+            const browser = await chromium.launch({
+              args: [
+                'disable-features=SafeSiteFilter'
+              ]
+            });
             const page = await browser.newPage();
 
             // ========== ۱. ذخیره تمام منابع (CSS, JS, تصاویر، فونت، JSON) ==========

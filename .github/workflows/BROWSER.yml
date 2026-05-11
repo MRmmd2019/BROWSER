@@ -32,10 +32,9 @@ jobs:
           npm install playwright
           npx playwright install --with-deps chromium
 
-      # ==================== نصب monolith (روش مقاوم) ====================
+      # ==================== نصب monolith ====================
       - name: Setup monolith
         run: |
-          # تلاش برای دریافت آخرین نسخه از API گیت‌هاب
           DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Y2Z/monolith/releases/latest | \
             grep "browser_download_url.*x86_64-unknown-linux-gnu" | \
             cut -d '"' -f 4)
@@ -56,7 +55,6 @@ jobs:
 
       # ==================== آماده‌سازی نام پوشه مقصد ====================
       - name: Prepare output directory
-        id: prep
         run: |
           URL="${{ github.event.inputs.url }}"
           DOMAIN=$(echo "$URL" | awk -F/ '{print $3}' | sed 's/^www\.//')
@@ -68,7 +66,7 @@ jobs:
           echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
           echo "URL=$URL" >> $GITHUB_ENV
 
-      # ==================== استخراج با Playwright ====================
+      # ==================== استخراج با Playwright (بهبودیافته) ====================
       - name: Extract page with Playwright
         run: |
           cat > extract.js << 'SCRIPT'
@@ -89,7 +87,7 @@ jobs:
             const browser = await chromium.launch();
             const page = await browser.newPage();
 
-            // ذخیره منابع استاتیک (CSS، JS، تصاویر، فونت، JSON)
+            // ذخیره منابع استاتیک
             page.on('response', async (response) => {
               if (response.status() === 200) {
                 const headers = response.headers();
@@ -109,19 +107,33 @@ jobs:
                     fs.mkdirSync(path.dirname(assetPath), { recursive: true });
                     fs.writeFileSync(assetPath, buffer);
                   } catch (e) {
-                    // از خطاهای غیرقابل اجتناب (مانند Stream closed) چشم‌پوشی کن
+                    // چشم‌پوشی از خطاهای غیرقابل اجتناب
                   }
                 }
               }
             });
 
-            await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+            // بارگذاری صفحه با domcontentloaded به‌جای networkidle (سریع‌تر)
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-            // اسکرین‌شات تمام‌صفحه
-            await page.screenshot({
-              path: path.join(outDir, 'screenshot.png'),
-              fullPage: true,
-            });
+            // مکث برای بارگذاری منابع داینامیک
+            await page.waitForTimeout(5000);
+
+            // اسکرین‌شات با timeout بیشتر
+            try {
+              await page.screenshot({
+                path: path.join(outDir, 'screenshot.png'),
+                fullPage: true,
+                timeout: 60000
+              });
+            } catch (err) {
+              console.error('Screenshot failed, taking viewport only:', err.message);
+              await page.screenshot({
+                path: path.join(outDir, 'screenshot.png'),
+                fullPage: false,
+                timeout: 60000
+              });
+            }
 
             // HTML نهایی
             const html = await page.content();

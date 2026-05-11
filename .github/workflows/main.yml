@@ -1,355 +1,351 @@
-name: ⬇️ Media Downloader Pro (yt‑dlp + FFmpeg + aria2)
+name: "Universal Video/Audio Downloader (yt‑dlp + aria2 + ffmpeg)"
 
 on:
   workflow_dispatch:
     inputs:
-      # -- انتخاب حالت --
-      download_mode:
-        description: '🎯 حالت دانلود'
-        required: true
-        type: choice
-        default: 'video'
-        options:
-          - 'video'
-          - 'audio'
+      # --- حالت دانلود (چک‌باکس) ---
+      download_video:
+        description: "✅ تیک بزنید → دانلود ویدیو | ❌ تیک نخورده → دانلود صوت"
+        type: boolean
+        default: true
+
       url:
-        description: '🎬 نشانی رسانه (یوتیوب یا هر سایت پشتیبانی‌شده)'
+        description: "🔗 لینک ویدیو یا صوت را وارد کنید"
+        type: string
         required: true
-        type: string
 
-      # -- گزینه‌های عمومی --
-      socket_timeout:
-        description: '⏱️ زمان انتظار برای اتصال (ثانیه)'
-        required: false
-        type: number
-        default: 30
+      # --- عمومی ---
+      list_supported_sites:
+        description: "📋 نمایش تمام سایت‌های پشتیبانی‌شده (خروجی txt)"
+        type: boolean
+        default: false
+
+      connect_timeout:
+        description: "⏱ زمان انتظار اتصال (ثانیه)"
+        type: string
+        default: "30"
+
       retries:
-        description: '🔄 تعداد تلاش مجدد (۱-۱۰)'
-        required: false
+        description: "🔁 تعداد تلاش مجدد (۱ تا ۱۰)"
         type: number
-        default: 3
+        default: 10
+
       fragment_retries:
-        description: '🧩 تعداد تلاش مجدد برای هر قطعه (۱-۱۰)'
-        required: false
+        description: "🔂 تلاش مجدد برای هر قطعه (۱ تا ۱۰)"
+        type: number
+        default: 10
+
+      extractor_retries:
+        description: "🛠 تلاش مجدد در صورت خطای دسترسی به فایل (۱ تا ۱۰)"
         type: number
         default: 3
-      file_access_retries:
-        description: '📁 تعداد تلاش مجدد خطای دسترسی به فایل (۱-۱۰)'
-        required: false
-        type: number
-        default: 3
-      filename_template:
-        description: '📝 الگوی نام فایل خروجی'
-        required: false
+
+      output_template:
+        description: "📁 الگوی نام فایل خروجی (default = مسیر خودکار)"
         type: string
-        default: '%(title)s.%(ext)s'
+        default: "default"
 
-      # -- گزینه‌های ویدیو --
-      list_extractors:
-        description: '📋 ویدیو: نمایش تمام سایت‌های پشتیبانی‌شده'
-        required: false
-        type: boolean
-        default: false
-      write_info_json:
-        description: '📄 ویدیو: نوشتن متادیتای ویدیو'
-        required: false
-        type: boolean
-        default: false
-      write_description:
-        description: '📝 ویدیو: نوشتن توضیحات ویدیو'
-        required: false
-        type: boolean
-        default: false
-      write_all_thumbnails:
-        description: '🖼️ ویدیو: ذخیره تمام تصاویر بندانگشتی'
-        required: false
-        type: boolean
-        default: false
-      format_choice:
-        description: '🎬 ویدیو: انتخاب فرمت'
-        required: false
-        type: choice
-        default: 'best'
-        options:
-          - 'best'
-          - 'bestvideo+bestaudio'
-          - '1080p (Full HD)'
-          - '720p (HD)'
-          - '480p'
-          - '360p'
-          - 'ویدیو MP4 (بهترین کیفیت)'
-          - 'ویدیو WebM (بهترین کیفیت)'
-          - 'ویدیو MKV (بهترین کیفیت)'
-      list_formats:
-        description: '📊 ویدیو: نمایش تمام فرمت‌های موجود'
-        required: false
-        type: boolean
-        default: false
-      merge_format:
-        description: '📦 ویدیو: فرمت ادغام نهایی'
-        required: false
-        type: choice
-        default: 'default'
-        options:
-          - 'default'
-          - 'mp4'
-          - 'mkv'
-          - 'webm'
-          - 'flv'
-          - 'ogg'
-
-      # -- گزینه‌های صوت --
-      audio_quality:
-        description: '🎧 صوت: کیفیت صدا'
-        required: false
-        type: choice
-        default: '0 (best)'
-        options:
-          - '0 (best)'
-          - '320K'
-          - '256K'
-          - '192K'
-          - '128K'
-      audio_format:
-        description: '🎵 صوت: فرمت صدا'
-        required: false
-        type: choice
-        default: 'mp3'
-        options:
-          - 'mp3'
-          - 'm4a'
-          - 'flac'
-          - 'wav'
-          - 'aac'
-          - 'opus'
-          - 'ogg'
-      embed_thumbnail:
-        description: '🖼️ صوت: قرار دادن کاور'
-        required: false
-        type: boolean
-        default: false
       embed_metadata:
-        description: '📋 صوت: قرار دادن متادیتا'
-        required: false
+        description: "🏷 نوشتن متادیتا در فایل"
+        type: boolean
+        default: false
+
+      write_description:
+        description: "📝 ذخیره توضیحات در فایل .description"
+        type: boolean
+        default: false
+
+      write_all_thumbnails:
+        description: "🖼 ذخیره تمام تصاویر بندانگشتی"
+        type: boolean
+        default: false
+
+      list_formats:
+        description: "📊 فقط نمایش فرمت‌های موجود (بدون دانلود)"
+        type: boolean
+        default: false
+
+      # --- ویدیو ---
+      format_choice:
+        description: "🎞 انتخاب فرمت ویدیو (custom = ورودی دلخواه)"
+        type: choice
+        options:
+          - best
+          - bestvideo+bestaudio
+          - bestaudio
+          - worst
+          - custom
+        default: "best"
+
+      custom_format:
+        description: "✏ فرمت دلخواه (مثلاً bestvideo[height<=1080]+bestaudio)"
+        type: string
+        default: ""
+
+      # --- صوت ---
+      audio_quality_choice:
+        description: "🎵 کیفیت صدا (best / kbps / custom)"
+        type: choice
+        options:
+          - best
+          - "320"
+          - "256"
+          - "192"
+          - "128"
+          - "64"
+          - custom
+        default: "best"
+
+      custom_audio_quality:
+        description: "✏ کیفیت دلخواه (مثلاً 192K)"
+        type: string
+        default: ""
+
+      audio_format_choice:
+        description: "🎧 فرمت صدا (best / mp3 / m4a / ...)"
+        type: choice
+        options:
+          - best
+          - mp3
+          - m4a
+          - aac
+          - opus
+          - vorbis
+          - flac
+          - wav
+          - custom
+        default: "best"
+
+      custom_audio_format:
+        description: "✏ فرمت صوتی دلخواه (اگر custom انتخاب شده)"
+        type: string
+        default: ""
+
+      embed_thumbnail:
+        description: "🖼 قرار دادن کاور در فایل صوتی"
         type: boolean
         default: false
 
 jobs:
   download:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+
+    env:
+      URL: ${{ inputs.url }}
+      DOWNLOAD_VIDEO: ${{ inputs.download_video }}
+      LIST_SUPPORTED_SITES: ${{ inputs.list_supported_sites }}
+      LIST_FORMATS: ${{ inputs.list_formats }}
+      CONNECT_TIMEOUT: ${{ inputs.connect_timeout }}
+      RETRIES: ${{ inputs.retries }}
+      FRAGMENT_RETRIES: ${{ inputs.fragment_retries }}
+      EXTRACTOR_RETRIES: ${{ inputs.extractor_retries }}
+      OUTPUT_TEMPLATE: ${{ inputs.output_template }}
+      EMBED_METADATA: ${{ inputs.embed_metadata }}
+      WRITE_DESCRIPTION: ${{ inputs.write_description }}
+      WRITE_ALL_THUMBNAILS: ${{ inputs.write_all_thumbnails }}
+      FORMAT_CHOICE: ${{ inputs.format_choice }}
+      CUSTOM_FORMAT: ${{ inputs.custom_format }}
+      AUDIO_QUALITY_CHOICE: ${{ inputs.audio_quality_choice }}
+      CUSTOM_AUDIO_QUALITY: ${{ inputs.custom_audio_quality }}
+      AUDIO_FORMAT_CHOICE: ${{ inputs.audio_format_choice }}
+      CUSTOM_AUDIO_FORMAT: ${{ inputs.custom_audio_format }}
+      EMBED_THUMBNAIL: ${{ inputs.embed_thumbnail }}
+
     steps:
-      - name: 📦 دریافت مخزن
-        uses: actions/checkout@v4
+      - name: 🧰 نصب وابستگی‌ها (ffmpeg, aria2, yt-dlp)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg aria2
+          pip install -q yt-dlp
+
+      - name: 📋 لیست سایت‌های پشتیبانی‌شده (در صورت درخواست)
+        if: env.LIST_SUPPORTED_SITES == 'true'
+        run: |
+          yt-dlp --list-extractors > supported_sites.txt
+          echo "supported_sites.txt تولید شد"
+
+      - name: 📊 نمایش فرمت‌های موجود (در صورت درخواست)
+        if: env.LIST_FORMATS == 'true'
+        run: |
+          yt-dlp -F "$URL" || echo "⚠️ دریافت فرمت‌ها ممکن نیست"
+        continue-on-error: true
+
+      - name: 🗂 آماده‌سازی الگوی نام فایل
+        id: prepare
+        run: |
+          if [ "$DOWNLOAD_VIDEO" = "true" ]; then
+            FOLDER="VIDEO"
+            DEF_TEMPLATE="VIDEO/%(title)s/%(title)s.%(ext)s"
+          else
+            FOLDER="AUDIO"
+            DEF_TEMPLATE="AUDIO/%(title)s/%(title)s.%(ext)s"
+          fi
+          if [ "$OUTPUT_TEMPLATE" = "default" ]; then
+            OUT="$DEF_TEMPLATE"
+          else
+            OUT="$OUTPUT_TEMPLATE"
+          fi
+          echo "OUTPUT=$OUT" >> $GITHUB_ENV
+          echo "FOLDER=$FOLDER" >> $GITHUB_ENV
+
+      - name: ⬇️ دانلود (ویدیو یا صوت)
+        if: env.LIST_FORMATS != 'true'
+        run: |
+          CMD="yt-dlp --no-mtime --socket-timeout $CONNECT_TIMEOUT --retries $RETRIES --fragment-retries $FRAGMENT_RETRIES --extractor-retries $EXTRACTOR_RETRIES --output \"$OUTPUT\""
+
+          # فعال‌سازی aria2 به عنوان دانلودر خارجی (در صورت وجود)
+          if command -v aria2c &> /dev/null; then
+            CMD="$CMD --downloader aria2c"
+          fi
+
+          if [ "$DOWNLOAD_VIDEO" = "true" ]; then
+            # ------------------- حالت ویدیو -------------------
+            case "$FORMAT_CHOICE" in
+              custom) FORMAT="$CUSTOM_FORMAT" ;;
+              *)      FORMAT="$FORMAT_CHOICE" ;;
+            esac
+            CMD="$CMD --format \"$FORMAT\""
+
+            [ "$EMBED_METADATA" = "true" ]      && CMD="$CMD --embed-metadata"
+            [ "$WRITE_DESCRIPTION" = "true" ]   && CMD="$CMD --write-description"
+            [ "$WRITE_ALL_THUMBNAILS" = "true" ] && CMD="$CMD --write-all-thumbnails"
+          else
+            # ------------------- حالت صوت -------------------
+            CMD="$CMD --extract-audio --format bestaudio/best"
+
+            # فرمت صوتی
+            case "$AUDIO_FORMAT_CHOICE" in
+              best)  ;;
+              custom) CMD="$CMD --audio-format $CUSTOM_AUDIO_FORMAT" ;;
+              *)      CMD="$CMD --audio-format $AUDIO_FORMAT_CHOICE" ;;
+            esac
+
+            # کیفیت صوتی
+            case "$AUDIO_QUALITY_CHOICE" in
+              best)   AQ=0 ;;
+              custom) AQ="$CUSTOM_AUDIO_QUALITY" ;;
+              *)      AQ="$AUDIO_QUALITY_CHOICE" ;;
+            esac
+            CMD="$CMD --audio-quality $AQ"
+
+            [ "$EMBED_METADATA" = "true" ]   && CMD="$CMD --embed-metadata"
+            [ "$EMBED_THUMBNAIL" = "true" ]  && CMD="$CMD --embed-thumbnail"
+          fi
+
+          CMD="$CMD \"$URL\""
+          echo "▶️ اجرا: $CMD"
+          eval $CMD
+
+      - name: 📖 ساخت فایل‌های راهنما (فارسی و انگلیسی)
+        run: |
+          mkdir -p docs
+
+          cat > docs/README_fa.md << 'FAEOF'
+          # 🎬 دانلودر جهانی ویدیو/صوت با GitHub Actions
+
+          با این ابزار می‌توانید از **هر سایتی که توسط yt-dlp پشتیبانی می‌شود**، ویدیو یا صوت را با کیفیت دلخواه دانلود کنید.
+
+          ## 🚀 روش استفاده
+          1. به مخزن بروید و تب **Actions** را باز کنید.
+          2. از فهرست workflows، **Universal Video/Audio Downloader** را انتخاب کنید.
+          3. روی دکمهٔ **Run workflow** کلیک کنید.
+          4. فیلدها را مطابق نیاز پر کنید (راهنمای پایین).
+          5. دکمهٔ سبز **Run workflow** را بزنید.
+          6. پس از اتمام، به همان صفحه برگردید و **Artifacts** (خروجی zip) را دانلود کنید.
+
+          ## ⚙️ توضیح ورودی‌ها
+
+          | ورودی | توضیح |
+          |-------|--------|
+          | `download_video` | تیک بزنید = دانلود ویدیو، خالی بگذارید = دانلود صوت |
+          | `url` | لینک صفحهٔ حاوی ویدیو/صوت |
+          | `list_supported_sites` | اگر تیک بزنید، فایل لیست سایت‌های پشتیبانی‌شده در خروجی قرار می‌گیرد |
+          | `connect_timeout` | زمان انتظار برای برقراری اتصال (ثانیه) |
+          | `retries` | تعداد تلاش مجدد کلی (۱-۱۰) |
+          | `fragment_retries` | تلاش مجدد برای هر قطعه (۱-۱۰) |
+          | `extractor_retries` | تلاش مجدد در خطای دسترسی به فایل (۱-۱۰) |
+          | `output_template` | الگوی نام فایل خروجی (default = پوشهٔ VIDEO یا AUDIO با نام خودکار) |
+          | `embed_metadata` | درج متادیتا داخل فایل نهایی |
+          | `write_description` | ذخیرهٔ توضیحات در فایل .description (فقط ویدیو) |
+          | `write_all_thumbnails` | ذخیرهٔ تمام تصاویر بندانگشتی (فقط ویدیو) |
+          | `list_formats` | فقط نمایش فرمت‌های موجود (بدون دانلود) |
+          | `format_choice` | کیفیت/فرمت ویدیو (best, bestvideo+bestaudio, custom ...) |
+          | `custom_format` | اگر format_choice = custom باشد، فرمت دلخواه وارد کنید |
+          | `audio_quality_choice` | کیفیت صدا (best یا عدد kbps یا custom) |
+          | `custom_audio_quality` | اگر audio_quality_choice = custom باشد، مقدار دلخواه |
+          | `audio_format_choice` | فرمت فایل صوتی (mp3, m4a, opus ...) |
+          | `custom_audio_format` | اگر audio_format_choice = custom باشد، فرمت دلخواه |
+          | `embed_thumbnail` | الصاق کاور به فایل صوتی |
+
+          ## 📦 خروجی
+          - **Artifact `downloaded-media`**: پوشهٔ `VIDEO` (در حالت ویدیو) یا `AUDIO` (در حالت صوت) حاوی فایل(های) دانلودشده.
+          - **Artifact `documentation`**: همین فایل‌های راهنما.
+          - در صورت انتخاب `list_supported_sites`، فایل `supported_sites.txt` نیز ارائه می‌شود.
+
+          > **نکته:** فقط یکی از دو حالت ویدیو یا صوت در هر اجرا فعال است.
+          FAEOF
+
+          cat > docs/README_en.md << 'ENEOF'
+          # 🎬 Universal Video/Audio Downloader with GitHub Actions
+
+          Download video or audio from **any site supported by yt-dlp** with full control over quality and metadata.
+
+          ## 🚀 How to Use
+          1. Open the **Actions** tab of this repository.
+          2. Select the **Universal Video/Audio Downloader** workflow.
+          3. Click the **Run workflow** button.
+          4. Fill in the required fields (see below).
+          5. Press the green **Run workflow** button.
+          6. When finished, return to the same run and download the **Artifacts** (zip file).
+
+          ## ⚙️ Inputs Reference
+
+          | Input | Description |
+          |-------|-------------|
+          | `download_video` | Check → Video mode, Uncheck → Audio mode |
+          | `url` | URL of the video/audio page |
+          | `list_supported_sites` | Output a list of all supported sites (txt) |
+          | `connect_timeout` | Connection timeout in seconds |
+          | `retries` | Number of retries (1‑10) |
+          | `fragment_retries` | Retries per fragment (1‑10) |
+          | `extractor_retries` | Retries on file access errors (1‑10) |
+          | `output_template` | Output filename template (default = auto folder under VIDEO or AUDIO) |
+          | `embed_metadata` | Embed metadata into the final file |
+          | `write_description` | Save description to .description file (video only) |
+          | `write_all_thumbnails` | Download all available thumbnails (video only) |
+          | `list_formats` | Only list available formats (no download) |
+          | `format_choice` | Video format/quality preset or custom |
+          | `custom_format` | Custom format string if `format_choice` is custom |
+          | `audio_quality_choice` | Audio quality: best, bitrate (kbps), or custom |
+          | `custom_audio_quality` | Custom audio quality value |
+          | `audio_format_choice` | Audio container format (mp3, m4a, opus, etc.) |
+          | `custom_audio_format` | Custom audio format if `audio_format_choice` is custom |
+          | `embed_thumbnail` | Embed cover art into audio file |
+
+          ## 📦 Output
+          - **Artifact `downloaded-media`**: folder `VIDEO` (video mode) or `AUDIO` (audio mode) with the downloaded files.
+          - **Artifact `documentation`**: these guide files.
+          - If `list_supported_sites` was checked, `supported_sites.txt` is also available.
+
+          > **Note:** Only one mode (video or audio) is performed per run.
+          ENEOF
+
+      - name: 📤 آپلود رسانه دانلودشده
+        uses: actions/upload-artifact@v4
+        if: env.LIST_FORMATS != 'true'
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          name: downloaded-media
+          path: ${{ env.FOLDER }}
 
-      - name: 🛠️ نصب yt‑dlp با FFmpeg و aria2
-        uses: AnimMouse/setup-yt-dlp@v3
+      - name: 📤 آپلود فایل‌های راهنما
+        uses: actions/upload-artifact@v4
         with:
-          ffmpeg: true
-          aria2: true
+          name: documentation
+          path: docs
 
-      # ------------------------------------------------------------
-      #  ویدیو: نگاشت فرمت
-      # ------------------------------------------------------------
-      - name: 🗺️ نگاشت گزینه‌های ویدیو
-        if: github.event.inputs.download_mode == 'video'
-        id: video-mapper
-        shell: bash
-        run: |
-          declare -A MAP=(
-            ["best"]="bestvideo*+bestaudio/best"
-            ["bestvideo+bestaudio"]="bestvideo+bestaudio/best"
-            ["1080p (Full HD)"]="bestvideo[height<=1080]+bestaudio/best[height<=1080]"
-            ["720p (HD)"]="bestvideo[height<=720]+bestaudio/best[height<=720]"
-            ["480p"]="bestvideo[height<=480]+bestaudio/best[height<=480]"
-            ["360p"]="bestvideo[height<=360]+bestaudio/best[height<=360]"
-            ["ویدیو MP4 (بهترین کیفیت)"]="bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"
-            ["ویدیو WebM (بهترین کیفیت)"]="bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]"
-            ["ویدیو MKV (بهترین کیفیت)"]="bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=mkv]"
-          )
-          CHOICE="${{ github.event.inputs.format_choice }}"
-          echo "format=${MAP[$CHOICE]}" >> "$GITHUB_OUTPUT"
-
-          MERGE=""
-          if [ "${{ github.event.inputs.merge_format }}" != "default" ]; then
-            MERGE="--merge-output-format ${{ github.event.inputs.merge_format }}"
-          fi
-          echo "merge=${MERGE}" >> "$GITHUB_OUTPUT"
-
-      # ------------------------------------------------------------
-      #  ویدیو: اجرای دانلود
-      # ------------------------------------------------------------
-      - name: 📥 دانلود ویدیو
-        if: github.event.inputs.download_mode == 'video'
-        shell: bash
-        run: |
-          DST="VIDEO"
-          mkdir -p "$DST"
-
-          if [ "${{ github.event.inputs.list_extractors }}" = "true" ]; then
-            yt-dlp --list-extractors > "$DST/supported_sites.json"
-            echo "✅ لیست سایت‌های پشتیبانی‌شده در VIDEO/supported_sites.json ذخیره شد"
-            exit 0
-          fi
-
-          if [ "${{ github.event.inputs.list_formats }}" = "true" ]; then
-            yt-dlp -F "${{ github.event.inputs.url }}" > "$DST/available_formats.txt"
-            echo "✅ فرمت‌های موجود در VIDEO/available_formats.txt ذخیره شد"
-            exit 0
-          fi
-
-          TEMPLATE="$DST/%(title)s/${{ github.event.inputs.filename_template }}"
-
-          EXTRA=()
-          [ "${{ github.event.inputs.write_info_json }}" = "true" ] && EXTRA+=("--write-info-json")
-          [ "${{ github.event.inputs.write_description }}" = "true" ] && EXTRA+=("--write-description")
-          [ "${{ github.event.inputs.write_all_thumbnails }}" = "true" ] && EXTRA+=("--write-all-thumbnails")
-
-          yt-dlp \
-            -f "${{ steps.video-mapper.outputs.format }}" \
-            ${{ steps.video-mapper.outputs.merge }} \
-            -o "$TEMPLATE" \
-            --socket-timeout "${{ github.event.inputs.socket_timeout }}" \
-            --retries "${{ github.event.inputs.retries }}" \
-            --fragment-retries "${{ github.event.inputs.fragment_retries }}" \
-            --file-access-retries "${{ github.event.inputs.file_access_retries }}" \
-            "${EXTRA[@]}" \
-            "${{ github.event.inputs.url }}"
-
-          echo "✅ دانلود ویدیو با موفقیت انجام شد"
-
-      # ------------------------------------------------------------
-      #  صوت: نگاشت کیفیت
-      # ------------------------------------------------------------
-      - name: 🗺️ نگاشت گزینه‌های صوت
-        if: github.event.inputs.download_mode == 'audio'
-        id: audio-mapper
-        shell: bash
-        run: |
-          Q="${{ github.event.inputs.audio_quality }}"
-          [ "$Q" = "0 (best)" ] && Q="0"
-          echo "quality=${Q}" >> "$GITHUB_OUTPUT"
-          echo "format=${{ github.event.inputs.audio_format }}" >> "$GITHUB_OUTPUT"
-
-      # ------------------------------------------------------------
-      #  صوت: اجرای دانلود
-      # ------------------------------------------------------------
-      - name: 📥 دانلود صوت
-        if: github.event.inputs.download_mode == 'audio'
-        shell: bash
-        run: |
-          DST="AUDIO"
-          mkdir -p "$DST"
-
-          if [ "${{ github.event.inputs.list_extractors }}" = "true" ]; then
-            yt-dlp --list-extractors > "$DST/supported_sites.json"
-            echo "✅ لیست سایت‌های پشتیبانی‌شده در AUDIO/supported_sites.json ذخیره شد"
-            exit 0
-          fi
-
-          TEMPLATE="$DST/%(title)s/${{ github.event.inputs.filename_template }}"
-
-          EXTRA=("-x"
-                 "--audio-format" "${{ steps.audio-mapper.outputs.format }}"
-                 "--audio-quality" "${{ steps.audio-mapper.outputs.quality }}")
-          [ "${{ github.event.inputs.embed_thumbnail }}" = "true" ] && EXTRA+=("--embed-thumbnail")
-          [ "${{ github.event.inputs.embed_metadata }}" = "true" ] && EXTRA+=("--embed-metadata")
-
-          yt-dlp \
-            "${EXTRA[@]}" \
-            -o "$TEMPLATE" \
-            --socket-timeout "${{ github.event.inputs.socket_timeout }}" \
-            --retries "${{ github.event.inputs.retries }}" \
-            --fragment-retries "${{ github.event.inputs.fragment_retries }}" \
-            --file-access-retries "${{ github.event.inputs.file_access_retries }}" \
-            "${{ github.event.inputs.url }}"
-
-          echo "✅ دانلود صوت با موفقیت انجام شد"
-
-      # ------------------------------------------------------------
-      #  README استاتیک انگلیسی
-      # ------------------------------------------------------------
-      - name: 📄 ایجاد README انگلیسی
-        shell: bash
-        run: |
-          if [ "${{ github.event.inputs.download_mode }}" = "video" ]; then
-            DIR="VIDEO"
-          else
-            DIR="AUDIO"
-          fi
-          cat > "$DIR/README.md" << 'EOF'
-# 📖 How to Download Media with This Tool
-
-This workflow uses **yt‑dlp**, **FFmpeg** and **aria2** to download
-media from YouTube and hundreds of other sites.
-
-### Quick Start
-1. Go to the **Actions** tab in this repository.
-2. Select the **Media Downloader Pro** workflow.
-3. Click **Run workflow**.
-4. Choose **video** or **audio** mode.
-5. Fill in the URL and desired options.
-6. Downloaded files are saved inside `VIDEO/` or `AUDIO/`.
-
-### Common Options
-- **Video**: `best`, `1080p (Full HD)`, `MP4`, `MKV`
-- **Audio**: `mp3`, `flac`, `m4a`
-- **Metadata**: Check the boxes to save `.info.json` or embed metadata.
-
----
-*Powered by yt‑dlp, FFmpeg, aria2, and GitHub Actions.*
-EOF
-
-      # ------------------------------------------------------------
-      #  README استاتیک فارسی
-      # ------------------------------------------------------------
-      - name: 📄 ایجاد README فارسی
-        shell: bash
-        run: |
-          if [ "${{ github.event.inputs.download_mode }}" = "video" ]; then
-            DIR="VIDEO"
-          else
-            DIR="AUDIO"
-          fi
-          cat > "$DIR/README_FA.md" << 'EOF'
-# 📖 راهنمای دانلود رسانه با این ابزار
-
-این ابزار از **yt‑dlp**، **FFmpeg** و **aria2** برای دانلود
-از یوتیوب و صدها سایت دیگر استفاده می‌کند.
-
-### شروع سریع
-1. به تب **Actions** در این مخزن بروید.
-2. ورک‌فلو **Media Downloader Pro** را انتخاب کنید.
-3. روی **Run workflow** کلیک کنید.
-4. حالت **ویدیو** یا **صوت** را انتخاب کنید.
-5. نشانی و گزینه‌های مورد نظر را وارد کنید.
-6. فایل‌ها در پوشه‌های `VIDEO/` یا `AUDIO/` ذخیره می‌شوند.
-
-### گزینه‌های پرکاربرد
-- **ویدیو**: `best`، `1080p (Full HD)`، `MP4`
-- **صوت**: `mp3`، `flac`، `m4a`
-- **فراداده**: چک‌باکس‌ها را برای ذخیرهٔ فایل اطلاعات یا الصاق متادیتا فعال کنید.
-
----
-*ابزاری بر پایهٔ yt‑dlp، FFmpeg، aria2 و GitHub Actions.*
-EOF
-
-      # ------------------------------------------------------------
-      #  ذخیره در مخزن
-      # ------------------------------------------------------------
-      - name: 💾 ذخیره تغییرات در مخزن
-        shell: bash
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          if [ "${{ github.event.inputs.download_mode }}" = "video" ]; then
-            git add VIDEO/
-          else
-            git add AUDIO/
-          fi
-          git commit -m "Add downloaded media and README files" || true
-          git push
+      - name: 📤 آپلود لیست سایت‌ها (در صورت درخواست)
+        if: env.LIST_SUPPORTED_SITES == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: supported-sites
+          path: supported_sites.txt

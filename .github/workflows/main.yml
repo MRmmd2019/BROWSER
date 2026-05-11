@@ -3,7 +3,6 @@ name: "Universal Video/Audio Downloader (yt‑dlp + aria2 + ffmpeg)"
 on:
   workflow_dispatch:
     inputs:
-      # --- حالت دانلود (چک‌باکس) ---
       download_video:
         description: "✅ تیک بزنید → دانلود ویدیو | ❌ تیک نخورده → دانلود صوت"
         type: boolean
@@ -14,7 +13,11 @@ on:
         type: string
         required: true
 
-      # --- عمومی ---
+      cookies:
+        description: "🍪 محتوای فایل کوکی (Netscape format) - اختیاری (در صورت نیاز)"
+        type: string
+        default: ""
+
       list_supported_sites:
         description: "📋 نمایش تمام سایت‌های پشتیبانی‌شده (خروجی txt)"
         type: boolean
@@ -40,8 +43,9 @@ on:
         type: number
         default: 3
 
+      # --- ویدیو ---
       output_template:
-        description: "📁 الگوی نام فایل خروجی (default = مسیر خودکار)"
+        description: "📁 الگوی نام فایل خروجی (default = پوشه خودکار)"
         type: string
         default: "default"
 
@@ -65,7 +69,6 @@ on:
         type: boolean
         default: false
 
-      # --- ویدیو ---
       format_choice:
         description: "🎞 انتخاب فرمت ویدیو (custom = ورودی دلخواه)"
         type: choice
@@ -133,6 +136,7 @@ jobs:
     env:
       URL: ${{ inputs.url }}
       DOWNLOAD_VIDEO: ${{ inputs.download_video }}
+      COOKIES: ${{ inputs.cookies }}
       LIST_SUPPORTED_SITES: ${{ inputs.list_supported_sites }}
       LIST_FORMATS: ${{ inputs.list_formats }}
       CONNECT_TIMEOUT: ${{ inputs.connect_timeout }}
@@ -157,6 +161,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg aria2
           pip install -q yt-dlp
+
+      - name: 🍪 ذخیره کوکی در فایل (در صورت ارائه)
+        if: env.COOKIES != ''
+        run: echo "$COOKIES" > cookies.txt
 
       - name: 📋 لیست سایت‌های پشتیبانی‌شده (در صورت درخواست)
         if: env.LIST_SUPPORTED_SITES == 'true'
@@ -188,14 +196,32 @@ jobs:
           echo "OUTPUT=$OUT" >> $GITHUB_ENV
           echo "FOLDER=$FOLDER" >> $GITHUB_ENV
 
-      - name: ⬇️ دانلود (ویدیو یا صوت)
+      - name: ⬇️ دانلود (ویدیو یا صوت) با هدرهای مرورگر
         if: env.LIST_FORMATS != 'true'
         run: |
+          # ساخت دستور پایه
           CMD="yt-dlp --no-mtime --socket-timeout $CONNECT_TIMEOUT --retries $RETRIES --fragment-retries $FRAGMENT_RETRIES --extractor-retries $EXTRACTOR_RETRIES --output \"$OUTPUT\""
 
-          # فعال‌سازی aria2 به عنوان دانلودر خارجی (در صورت وجود)
+          # افزودن User-Agent شبیه‌سازی‌شده مرورگر Chrome
+          CMD="$CMD --user-agent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\""
+
+          # افزودن هدرهای استاندارد مرورگر
+          CMD="$CMD --add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\""
+          CMD="$CMD --add-header \"Accept-Language: en-US,en;q=0.5\""
+          CMD="$CMD --add-header \"Sec-Fetch-Dest: document\""
+          CMD="$CMD --add-header \"Sec-Fetch-Mode: navigate\""
+          CMD="$CMD --add-header \"Sec-Fetch-Site: none\""
+          CMD="$CMD --add-header \"Sec-Fetch-User: ?1\""
+          CMD="$CMD --referer \"$URL\""   # ارجاع‌دهنده معتبر
+
+          # فعال‌سازی aria2 در صورت وجود
           if command -v aria2c &> /dev/null; then
             CMD="$CMD --downloader aria2c"
+          fi
+
+          # استفاده از کوکی در صورت وجود
+          if [ -f cookies.txt ]; then
+            CMD="$CMD --cookies cookies.txt"
           fi
 
           if [ "$DOWNLOAD_VIDEO" = "true" ]; then
@@ -213,14 +239,12 @@ jobs:
             # ------------------- حالت صوت -------------------
             CMD="$CMD --extract-audio --format bestaudio/best"
 
-            # فرمت صوتی
             case "$AUDIO_FORMAT_CHOICE" in
               best)  ;;
               custom) CMD="$CMD --audio-format $CUSTOM_AUDIO_FORMAT" ;;
               *)      CMD="$CMD --audio-format $AUDIO_FORMAT_CHOICE" ;;
             esac
 
-            # کیفیت صوتی
             case "$AUDIO_QUALITY_CHOICE" in
               best)   AQ=0 ;;
               custom) AQ="$CUSTOM_AUDIO_QUALITY" ;;
@@ -259,6 +283,7 @@ jobs:
           |-------|--------|
           | `download_video` | تیک بزنید = دانلود ویدیو، خالی بگذارید = دانلود صوت |
           | `url` | لینک صفحهٔ حاوی ویدیو/صوت |
+          | `cookies` | محتوای کوکی‌ها با فرمت Netscape (اگر سایت نیاز به ورود داشته باشد) |
           | `list_supported_sites` | اگر تیک بزنید، فایل لیست سایت‌های پشتیبانی‌شده در خروجی قرار می‌گیرد |
           | `connect_timeout` | زمان انتظار برای برقراری اتصال (ثانیه) |
           | `retries` | تعداد تلاش مجدد کلی (۱-۱۰) |
@@ -276,6 +301,11 @@ jobs:
           | `audio_format_choice` | فرمت فایل صوتی (mp3, m4a, opus ...) |
           | `custom_audio_format` | اگر audio_format_choice = custom باشد، فرمت دلخواه |
           | `embed_thumbnail` | الصاق کاور به فایل صوتی |
+
+          ## 🛡️ رفع خطای 403
+          ابزار به‌طور پیش‌فرض با هدرهای یک مرورگر واقعی (Chrome) درخواست می‌دهد. در صورت دریافت خطای 403:
+          - از فیلد `cookies` استفاده کنید (با نصب افزونهٔ **Get cookies.txt LOCALLY** در مرورگر، فایل کوکی را استخراج و محتوای آن را کپی کنید).
+          - می‌توانید User-Agent یا Referer را از طریق تغییر مستقیم اسکریپت سفارشی کنید.
 
           ## 📦 خروجی
           - **Artifact `downloaded-media`**: پوشهٔ `VIDEO` (در حالت ویدیو) یا `AUDIO` (در حالت صوت) حاوی فایل(های) دانلودشده.
@@ -302,8 +332,9 @@ jobs:
 
           | Input | Description |
           |-------|-------------|
-          | `download_video` | Check → Video mode, Uncheck → Audio mode |
+          | `download_video` | Check → Video mode / Uncheck → Audio mode |
           | `url` | URL of the video/audio page |
+          | `cookies` | Netscape-formatted cookies content (for sites requiring login) |
           | `list_supported_sites` | Output a list of all supported sites (txt) |
           | `connect_timeout` | Connection timeout in seconds |
           | `retries` | Number of retries (1‑10) |
@@ -322,10 +353,15 @@ jobs:
           | `custom_audio_format` | Custom audio format if `audio_format_choice` is custom |
           | `embed_thumbnail` | Embed cover art into audio file |
 
+          ## 🛡️ Avoiding 403 errors
+          By default, the tool sends headers mimicking a real Chrome browser. If you still get a 403:
+          - Use the `cookies` input (extract cookies using the **Get cookies.txt LOCALLY** browser add‑on and paste its content).
+          - You can manually modify User-Agent or Referer inside the script if needed.
+
           ## 📦 Output
-          - **Artifact `downloaded-media`**: folder `VIDEO` (video mode) or `AUDIO` (audio mode) with the downloaded files.
-          - **Artifact `documentation`**: these guide files.
-          - If `list_supported_sites` was checked, `supported_sites.txt` is also available.
+          - **Artifact `downloaded-media`**: folder `VIDEO` (video) or `AUDIO` (audio) with your files.
+          - **Artifact `documentation`**: these guides.
+          - If `list_supported_sites` was checked, `supported_sites.txt` is also provided.
 
           > **Note:** Only one mode (video or audio) is performed per run.
           ENEOF

@@ -1,4 +1,4 @@
-# 🎬 How to sign up for the Model Program
+# 🎬 HowtosignupfortheModelProgram
 
 این فایل رسانه‌ای توسط **دانلودر جهانی** مبتنی بر yt‑dlp دریافت شده است.
 
@@ -10,7 +10,7 @@
 
 ## 🛠 جزئیات فنی
 - **ابزار:** yt‑dlp + aria2 + ffmpeg
-- **تاریخ:** 2026-05-11 12:09:55 UTC
+- **تاریخ:** 2026-05-11 12:19:18 UTC
 - **حالت:** video
 
 ---

@@ -3,7 +3,7 @@ name: "🎬 Universal Media Downloader (Push to Repo)"
 on:
   workflow_dispatch:
     inputs:
-      # --- Mode ---
+      # ===== حالت دانلود =====
       download_video:
         description: "✅ تیک بزنید → ویدیو | ❌ خالی → صوت"
         type: boolean
@@ -19,7 +19,7 @@ on:
         type: string
         default: ""
 
-      # --- General options ---
+      # ===== گزینه‌های عمومی =====
       list_supported_sites:
         description: "📋 لیست سایت‌های پشتیبانی‌شده (txt)"
         type: boolean
@@ -45,24 +45,24 @@ on:
         type: number
         default: 3
 
-      # --- Video ---
+      # ===== گزینه‌های ویدیو =====
       output_template:
         description: "📁 الگوی نام فایل (default = پوشه خودکار)"
         type: string
         default: "default"
 
       embed_metadata:
-        description: "🏷 درج متادیتا در فایل"
+        description: "🏷 درج متادیتا در فایل (ویدیو/صوت)"
         type: boolean
         default: false
 
       write_description:
-        description: "📝 ذخیره توضیحات (.description)"
+        description: "📝 ذخیره توضیحات (فقط ویدیو)"
         type: boolean
         default: false
 
       write_all_thumbnails:
-        description: "🖼 ذخیره تمام تصاویر بندانگشتی"
+        description: "🖼 ذخیره تمام تصاویر بندانگشتی (فقط ویدیو)"
         type: boolean
         default: false
 
@@ -72,7 +72,7 @@ on:
         default: false
 
       format_choice:
-        description: "🎞 فرمت ویدیو"
+        description: "🎞 فرمت ویدیو (custom = ورودی دلخواه)"
         type: choice
         options:
           - best
@@ -87,9 +87,9 @@ on:
         type: string
         default: ""
 
-      # --- Audio ---
+      # ===== گزینه‌های صوت =====
       audio_quality_choice:
-        description: "🎵 کیفیت صدا"
+        description: "🎵 کیفیت صدا (best / kbps / custom)"
         type: choice
         options:
           - best
@@ -107,7 +107,7 @@ on:
         default: ""
 
       audio_format_choice:
-        description: "🎧 فرمت صدا"
+        description: "🎧 فرمت صدا (best / mp3 / m4a / ...)"
         type: choice
         options:
           - best
@@ -131,11 +131,21 @@ on:
         type: boolean
         default: false
 
-      # --- Split & push ---
-      split_threshold_mb:
-        description: "📦 حداکثر حجم هر بخش (MB) - پیش‌فرض 45"
+      # ===== گزینه‌های تقسیم و فشرده‌سازی (انتهای فرم) =====
+      split_parts:
+        description: "🔢 تعداد تکه‌ها (۱ = بدون تقسیم)"
         type: number
-        default: 45
+        default: 1
+
+      max_part_size_mb:
+        description: "📦 حداکثر حجم هر تکه (MB) - خالی = تقسیم بر اساس تعداد"
+        type: string
+        default: ""
+
+      compression_level:
+        description: "🗜 سطح فشرده‌سازی (۱ تا ۹) - پیش‌فرض ۶"
+        type: number
+        default: 6
 
       zip_password:
         description: "🔐 رمز فایل zip (اختیاری)"
@@ -194,10 +204,20 @@ jobs:
           echo "MODE=$MODE" >> $GITHUB_ENV
           echo "ROOT_FOLDER=$ROOT_FOLDER" >> $GITHUB_ENV
 
-          SPLIT_THRESHOLD_MB=${{ inputs.split_threshold_mb }}
-          echo "SPLIT_THRESHOLD_MB=$SPLIT_THRESHOLD_MB" >> $GITHUB_ENV
+          # پردازش مقادیر تقسیم
+          SPLIT_PARTS=${{ inputs.split_parts }}
+          MAX_PART_SIZE_MB="${{ inputs.max_part_size_mb }}"
+          COMPRESSION_LEVEL=${{ inputs.compression_level }}
+          ZIP_PASSWORD="${{ inputs.zip_password }}"
 
-          echo "ZIP_PASSWORD=${{ inputs.zip_password }}" >> $GITHUB_ENV
+          # اعتبارسنجی
+          if [ "$SPLIT_PARTS" -lt 1 ]; then SPLIT_PARTS=1; fi
+          if [ "$COMPRESSION_LEVEL" -lt 1 ] || [ "$COMPRESSION_LEVEL" -gt 9 ]; then COMPRESSION_LEVEL=6; fi
+
+          echo "SPLIT_PARTS=$SPLIT_PARTS" >> $GITHUB_ENV
+          echo "MAX_PART_SIZE_MB=$MAX_PART_SIZE_MB" >> $GITHUB_ENV
+          echo "COMPRESSION_LEVEL=$COMPRESSION_LEVEL" >> $GITHUB_ENV
+          echo "ZIP_PASSWORD=$ZIP_PASSWORD" >> $GITHUB_ENV
 
       - name: 📋 لیست سایت‌های پشتیبانی (در صورت درخواست)
         if: inputs.list_supported_sites == 'true'
@@ -333,11 +353,12 @@ jobs:
           EOF
           done
 
-      - name: 📦 بسته‌بندی و تقسیم فایل‌های حجیم (نسخه امن)
+      - name: 📦 بسته‌بندی و تقسیم فایل‌ها (انعطاف‌پذیر)
         run: |
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
-          THRESHOLD_MB="${{ env.SPLIT_THRESHOLD_MB }}"
-          THRESHOLD_BYTES=$((THRESHOLD_MB * 1024 * 1024))
+          SPLIT_PARTS=${{ env.SPLIT_PARTS }}
+          MAX_PART_SIZE_MB="${{ env.MAX_PART_SIZE_MB }}"
+          COMPRESSION_LEVEL=${{ env.COMPRESSION_LEVEL }}
           ZIP_PASSWORD="${{ env.ZIP_PASSWORD }}"
 
           cd "$BACKUP_DIR"
@@ -345,64 +366,64 @@ jobs:
             [ -d "$FOLDER" ] || continue
             FOLDER_NAME=$(basename "$FOLDER")
 
-            # ایجاد یک نام امن برای آرشیو (فقط حروف، اعداد و خط تیره)
+            # نام امن برای آرشیو
             SAFE_NAME=$(echo "$FOLDER_NAME" | tr -cd '[:alnum:]-_' | head -c 50)
             [ -z "$SAFE_NAME" ] && SAFE_NAME="media_$(date +%s)"
 
             mkdir -p "./packed/$SAFE_NAME"
 
-            # چکسام همه فایل‌های غیر zip در پوشه اصلی
+            # چکسام
             find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -exec sha256sum {} \; > "./packed/$SAFE_NAME/SHA256SUMS"
 
-            # پیدا کردن بزرگترین فایل غیر zip
+            # یافتن فایل اصلی
             MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
             if [ -z "$MAIN_FILE" ]; then
-              echo "No main file in $FOLDER, skipping."
               continue
             fi
 
             SIZE=$(stat -c%s "$MAIN_FILE")
             echo "Processing $MAIN_FILE ($((SIZE/1024/1024)) MB)"
 
-            if [ "$SIZE" -gt "$THRESHOLD_BYTES" ]; then
-              # کپی فایل با نام امن به مکان موقت
-              SAFE_FILE="./packed/$SAFE_NAME/media_file"
-              cp "$MAIN_FILE" "$SAFE_FILE"
+            # تعیین حالت تقسیم
+            USE_SPLIT=false
+            if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
+              # تقسیم بر اساس حجم ثابت
+              SPLIT_SIZE="$MAX_PART_SIZE_MB"
+              USE_SPLIT=true
+            elif [ "$SPLIT_PARTS" -gt 1 ]; then
+              # تقسیم بر اساس تعداد
+              SPLIT_SIZE=$(echo "($SIZE + $SPLIT_PARTS - 1) / $SPLIT_PARTS / 1048576 + 1" | bc)
+              USE_SPLIT=true
+            fi
 
+            # کپی با نام امن
+            SAFE_FILE="./packed/$SAFE_NAME/media_file"
+            cp "$MAIN_FILE" "$SAFE_FILE"
+
+            if [ "$USE_SPLIT" = true ]; then
+              echo "Splitting into parts of ${SPLIT_SIZE} MB"
               ARCHIVE_BASE="./packed/$SAFE_NAME/${SAFE_NAME}"
               if [ -n "$ZIP_PASSWORD" ]; then
-                zip -j -P "$ZIP_PASSWORD" -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
+                zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
               else
-                zip -j -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
+                zip -j -${COMPRESSION_LEVEL} -s ${SPLIT_SIZE}m "${ARCHIVE_BASE}.zip" "$SAFE_FILE"
               fi
-
-              # بررسی موفقیت split
-              if compgen -G "./packed/$SAFE_NAME/${SAFE_NAME}.zip" > /dev/null || compgen -G "./packed/$SAFE_NAME/${SAFE_NAME}.z01" > /dev/null; then
-                echo "Split successful for $MAIN_FILE"
-                rm -f "$SAFE_FILE"  # حذف کپی موقت
-              else
-                echo "❌ Split failed for $MAIN_FILE – will keep as single file but push may fail if >100MB"
-                # اگر split شکست خورد، فایل اصلی را در packed قرار می‌دهیم
-                cp "$MAIN_FILE" "./packed/$SAFE_NAME/${SAFE_NAME}.mp4"
-                rm -f "$SAFE_FILE"
-              fi
+              rm -f "$SAFE_FILE"
             else
-              # فایل کوچک: فقط zip ساده
-              SAFE_FILE="./packed/$SAFE_NAME/media_file"
-              cp "$MAIN_FILE" "$SAFE_FILE"
+              # بدون تقسیم
               if [ -n "$ZIP_PASSWORD" ]; then
-                zip -j -P "$ZIP_PASSWORD" "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
+                zip -j -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
               else
-                zip -j "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
+                zip -j -${COMPRESSION_LEVEL} "./packed/$SAFE_NAME/${SAFE_NAME}.zip" "$SAFE_FILE"
               fi
               rm -f "$SAFE_FILE"
             fi
 
-            # کپی فایل‌های جانبی (README, description, thumbnails)
+            # کپی فایل‌های جانبی
             cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$SAFE_NAME/" 2>/dev/null || true
           done
 
-          # جایگزینی محتوای اصلی با packed (امن)
+          # جایگزینی محتوای اصلی با packed
           for FOLDER in */; do
             if [ "$FOLDER" != "packed/" ]; then
               rm -rf "$FOLDER"
@@ -416,8 +437,6 @@ jobs:
           BACKUP_DIR: ${{ env.BACKUP_DIR }}
           ROOT_FOLDER: ${{ env.ROOT_FOLDER }}
           BRANCH: ${{ env.BRANCH }}
-          REPO_OWNER: ${{ env.REPO_OWNER }}
-          REPO_NAME: ${{ env.REPO_NAME }}
         run: |
           BACKUP_DIR="${BACKUP_DIR}"
           ROOT_FOLDER="${ROOT_FOLDER}"
@@ -432,10 +451,7 @@ jobs:
           ALL_FILES=()
           while IFS= read -r -d '' f; do ALL_FILES+=("$f"); done < <(find "$ROOT_FOLDER" -type f -print0 | sort -z)
 
-          TOTAL_FILES=${#ALL_FILES[@]}
-          echo "Total files to push: $TOTAL_FILES"
-
-          if [ $TOTAL_FILES -eq 0 ]; then
+          if [ ${#ALL_FILES[@]} -eq 0 ]; then
             echo "Nothing to push."
             exit 0
           fi
@@ -478,7 +494,7 @@ jobs:
             push_batch "${batch[@]}" || { echo "❌ Push final batch failed!"; exit 1; }
           fi
 
-          # آپدیت README اصلی ریپو
+          # به‌روزرسانی README اصلی
           git fetch origin "$BRANCH"
           git rebase origin/"$BRANCH" --quiet 2>/dev/null || git rebase --abort
           mkdir -p "$ROOT_FOLDER"

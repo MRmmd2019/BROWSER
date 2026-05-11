@@ -7,9 +7,64 @@ on:
         description: 'URL of the page to extract'
         required: true
 
+      output_type:
+        description: 'نوع خروجی'
+        required: true
+        type: choice
+        default: 'zip_and_folder'
+        options:
+          - zip_only
+          - zip_and_folder
+          - folder_only
+
+      enable_split:
+        description: '✅ فعال‌سازی تقسیم فایل zip به تکه‌های کوچک'
+        type: boolean
+        default: false
+
+      split_parts:
+        description: '🔢 تعداد تکه‌ها (۱ = بدون تقسیم)'
+        type: number
+        default: 1
+
+      max_part_size_mb:
+        description: '📦 حداکثر حجم هر تکه (MB) - خالی = تقسیم بر اساس تعداد'
+        type: string
+        default: ''
+
+      compression_level:
+        description: '🗜 سطح فشرده‌سازی (۱ تا ۹) - پیش‌فرض ۶'
+        type: number
+        default: 6
+
+      zip_password:
+        description: '🔐 رمز فایل zip (اختیاری)'
+        type: string
+        default: ''
+
+      screenshot_fallback_retries:
+        description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۱۰)'
+        type: number
+        default: 3
+
+      pdf_fallback_retries:
+        description: '📄 تعداد تلاش مجدد برای PDF (۱-۱۰)'
+        type: number
+        default: 3
+
+      pdf_text_align:
+        description: '📐 تراز متن در PDF'
+        type: choice
+        default: 'rtl'
+        options:
+          - rtl
+          - ltr
+          - center
+
 jobs:
   extract:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       contents: write
     steps:
@@ -19,41 +74,33 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # ==================== پیش‌نیازهای سیستم ====================
       - name: Setup system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl zip wget
+          sudo apt-get install -y curl zip wget aria2 bc
 
-      # ==================== نصب Node.js و Playwright ====================
       - name: Setup Node.js and Playwright
         run: |
           npm init -y
           npm install playwright
           npx playwright install --with-deps chromium
 
-      # ==================== نصب monolith (روش مقاوم) ====================
-      - name: Setup monolith
+      - name: Setup monolith (with aria2c)
         run: |
           DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Y2Z/monolith/releases/latest | \
             grep "browser_download_url.*x86_64-unknown-linux-gnu" | \
             cut -d '"' -f 4)
-
           if [ -n "$DOWNLOAD_URL" ]; then
-            echo "Downloading from: $DOWNLOAD_URL"
-            wget "$DOWNLOAD_URL" -O monolith.tar.gz
+            echo "Downloading with aria2c: $DOWNLOAD_URL"
+            aria2c -x 4 -s 4 "$DOWNLOAD_URL" -o monolith.tar.gz
             tar xzf monolith.tar.gz
             sudo mv monolith /usr/local/bin/
           else
-            echo "Falling back to cargo install..."
             sudo apt-get install -y cargo
             cargo install monolith
           fi
-
           monolith --version
-          echo "Monolith installed successfully"
 
-      # ==================== آماده‌سازی نام پوشه مقصد ====================
       - name: Prepare output directory
         run: |
           URL="${{ github.event.inputs.url }}"
@@ -65,64 +112,50 @@ jobs:
           echo "FOLDER_NAME=$FOLDER_NAME" >> $GITHUB_ENV
           echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
           echo "URL=$URL" >> $GITHUB_ENV
-
           CLEAN_URL=$(echo "$URL" | sed 's/\?.*//')
           echo "CLEAN_URL=$CLEAN_URL" >> $GITHUB_ENV
 
-      # ==================== استخراج کامل صفحه با Playwright (اسکریپت inline) ====================
       - name: Extract page with Playwright
         run: |
           cat > extract.js << 'SCRIPT'
           const { chromium } = require('playwright');
           const fs = require('fs');
           const path = require('path');
-
           const url = process.argv[2];
           const outDir = process.argv[3];
-
+          const screenshotRetries = parseInt(process.argv[4] || '3');
+          const pdfRetries = parseInt(process.argv[5] || '3');
+          const pdfAlign = process.argv[6] || 'rtl';
+          const MAIN_DOMAIN = new URL(url).hostname;
           function sanitizeFilename(urlPath) {
-            return decodeURIComponent(urlPath)
-              .replace(/[<>:"|?*]/g, '_')
-              .replace(/\/$/, '/index.html');
+            return decodeURIComponent(urlPath).replace(/[<>:"|?*]/g, '_').replace(/\/$/, '/index.html');
           }
-
           (async () => {
             const browser = await chromium.launch();
             const page = await browser.newPage();
-
-            // ========== ۱. ذخیره تمام منابع (CSS, JS, تصاویر، فونت، JSON) ==========
             page.on('response', async (response) => {
-              if (response.status() === 200) {
-                const headers = response.headers();
-                const contentType = headers['content-type'] || '';
-                if (
-                  contentType.includes('text/css') ||
-                  contentType.includes('application/javascript') ||
-                  contentType.includes('image/') ||
-                  contentType.includes('font') ||
-                  contentType.includes('application/json')
-                ) {
-                  try {
-                    const buffer = await response.body();
-                    const respUrl = new URL(response.url());
-                    const cleanPath = sanitizeFilename(respUrl.pathname);
-                    const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
-                    fs.mkdirSync(path.dirname(assetPath), { recursive: true });
-                    fs.writeFileSync(assetPath, buffer);
-                  } catch (e) {
-                    // چشم‌پوشی از خطاهای غیرمنتظره
-                  }
-                }
+              if (response.status() !== 200) return;
+              const respUrl = new URL(response.url());
+              if (!(respUrl.hostname === MAIN_DOMAIN || respUrl.hostname.endsWith('.' + MAIN_DOMAIN))) return;
+              const headers = response.headers();
+              const contentType = headers['content-type'] || '';
+              if (
+                contentType.includes('text/css') ||
+                contentType.includes('application/javascript') ||
+                contentType.includes('image/') ||
+                contentType.includes('font') ||
+                contentType.includes('application/json')
+              ) {
+                try {
+                  const buffer = await response.body();
+                  const cleanPath = sanitizeFilename(respUrl.pathname);
+                  const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
+                  fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+                  fs.writeFileSync(assetPath, buffer);
+                } catch (e) {}
               }
             });
-
-            // ========== ۲. بارگذاری صفحه با timeout بالا ==========
-            await page.goto(url, {
-              waitUntil: 'networkidle',
-              timeout: 120000
-            });
-
-            // ========== ۳. اسکرول هوشمند برای بارگذاری کامل محتوای lazy ==========
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
             await page.evaluate(async () => {
               await new Promise((resolve) => {
                 let totalHeight = 0;
@@ -139,165 +172,385 @@ jobs:
               });
             });
             await page.waitForTimeout(2000);
-
-            // ========== ۴. برگشت به بالای صفحه برای گرفتن اسکرین‌شات کامل ==========
             await page.evaluate(() => window.scrollTo(0, 0));
-            await page.waitForTimeout(500); // کمی صبر برای رندر نهایی در بالای صفحه
-
-            // ========== ۵. استخراج تمام لینک‌های موجود در صفحه ==========
+            await page.waitForTimeout(500);
             const allLinks = await page.evaluate(() => {
               const links = [];
-              document.querySelectorAll('a').forEach(a => { if (a.href) links.push(a.href); });
-              document.querySelectorAll('link').forEach(link => { if (link.href) links.push(link.href); });
-              document.querySelectorAll('script').forEach(script => { if (script.src) links.push(script.src); });
-              document.querySelectorAll('img').forEach(img => { if (img.src) links.push(img.src); });
-              document.querySelectorAll('video, audio, source').forEach(el => { if (el.src) links.push(el.src); });
-              document.querySelectorAll('iframe').forEach(iframe => { if (iframe.src) links.push(iframe.src); });
-              return [...new Set(links)]; // حذف تکراری‌ها
+              document.querySelectorAll('a[href]').forEach(a => links.push(a.href));
+              document.querySelectorAll('link[href]').forEach(l => links.push(l.href));
+              document.querySelectorAll('script[src]').forEach(s => links.push(s.src));
+              document.querySelectorAll('img[src]').forEach(i => links.push(i.src));
+              document.querySelectorAll('video[src], audio[src], source[src]').forEach(m => links.push(m.src));
+              document.querySelectorAll('iframe[src]').forEach(f => links.push(f.src));
+              return [...new Set(links)];
             });
             fs.writeFileSync(path.join(outDir, 'all_links.json'), JSON.stringify(allLinks, null, 2));
-
-            // ========== ۶. لانگ اسکرین کامل (full-page screenshot) ==========
-            try {
-              await page.screenshot({
-                path: path.join(outDir, 'screenshot.png'),
-                fullPage: true,
-                timeout: 120000
-              });
-            } catch (err) {
-              console.error('Full-page screenshot failed, trying viewport:', err.message);
-              await page.screenshot({
-                path: path.join(outDir, 'screenshot.png'),
-                fullPage: false,
-                timeout: 60000
-              });
-            }
-
-            // ========== ۷. ذخیره HTML نهایی صفحه ==========
-            const html = await page.content();
-            fs.writeFileSync(path.join(outDir, 'index.html'), html);
-
-            // ========== ۸. خروجی PDF با استفاده از پروتکل DevTools (PrintToPDF) ==========
-            try {
-              // تنظیم راست‌چین برای متن فارسی
-              await page.evaluate(() => {
-                document.body.style.direction = 'rtl';
-              });
-
-              const session = await page.context().newCDPSession(page);
-              const result = await session.send('Page.printToPDF', {
-                printBackground: true,
-                preferCSSPageSize: true,
-                displayHeaderFooter: false,
-                marginTop: '0.4in',
-                marginBottom: '0.4in',
-                marginLeft: '0.4in',
-                marginRight: '0.4in',
-                landscape: false,
-                transferMode: 'ReturnAsStream'
-              });
-
-              const stream = result.stream;
-              const pdfData = await session.send('IO.read', { handle: stream });
-              fs.writeFileSync(path.join(outDir, 'page.pdf'), Buffer.from(pdfData.data, 'base64'));
-              await session.send('IO.close', { handle: stream });
-              console.log('PDF generated successfully using CDP PrintToPDF');
-            } catch (pdfErr) {
-              console.error('CDP PDF generation failed, trying standard method:', pdfErr.message);
+            let screenshotDone = false;
+            for (let i = 0; i < screenshotRetries; i++) {
               try {
-                await page.pdf({
-                  path: path.join(outDir, 'page.pdf'),
-                  format: 'A4',
-                  printBackground: true,
-                  timeout: 120000
-                });
-              } catch (standardPdfErr) {
-                console.error('Standard PDF generation also failed:', standardPdfErr.message);
+                await page.screenshot({ path: path.join(outDir, 'screenshot.png'), fullPage: true, timeout: 120000 });
+                screenshotDone = true;
+                console.log(`Screenshot taken on attempt ${i+1}`);
+                break;
+              } catch (err) {
+                console.log(`Screenshot attempt ${i+1} failed: ${err.message}`);
+                if (i === screenshotRetries - 1) {
+                  try {
+                    await page.screenshot({ path: path.join(outDir, 'screenshot.png'), fullPage: false, timeout: 60000 });
+                    screenshotDone = true;
+                  } catch (e2) {
+                    console.error('All screenshot attempts failed.');
+                  }
+                }
               }
             }
-
+            const html = await page.content();
+            fs.writeFileSync(path.join(outDir, 'index.html'), html);
+            if (pdfAlign === 'rtl') {
+              await page.evaluate(() => { document.body.style.direction = 'rtl'; });
+            } else if (pdfAlign === 'center') {
+              await page.evaluate(() => { document.body.style.textAlign = 'center'; });
+            }
+            for (let i = 0; i < pdfRetries; i++) {
+              try {
+                const session = await page.context().newCDPSession(page);
+                const result = await session.send('Page.printToPDF', {
+                  printBackground: true,
+                  preferCSSPageSize: true,
+                  displayHeaderFooter: false,
+                  marginTop: '0.4in',
+                  marginBottom: '0.4in',
+                  marginLeft: '0.4in',
+                  marginRight: '0.4in',
+                  landscape: false,
+                  transferMode: 'ReturnAsStream'
+                });
+                const stream = result.stream;
+                const pdfData = await session.send('IO.read', { handle: stream });
+                fs.writeFileSync(path.join(outDir, 'page.pdf'), Buffer.from(pdfData.data, 'base64'));
+                await session.send('IO.close', { handle: stream });
+                console.log(`PDF generated on attempt ${i+1}`);
+                break;
+              } catch (err) {
+                console.log(`PDF attempt ${i+1} failed: ${err.message}`);
+                if (i === pdfRetries - 1) {
+                  try {
+                    await page.pdf({ path: path.join(outDir, 'page.pdf'), format: 'A4', printBackground: true, timeout: 120000 });
+                  } catch (e2) {
+                    console.error('All PDF attempts failed.');
+                  }
+                }
+              }
+            }
             await browser.close();
           })();
           SCRIPT
+          node extract.js "${{ github.event.inputs.url }}" "$OUT_DIR" \
+            "${{ github.event.inputs.screenshot_fallback_retries }}" \
+            "${{ github.event.inputs.pdf_fallback_retries }}" \
+            "${{ github.event.inputs.pdf_text_align }}"
 
-          node extract.js "${{ github.event.inputs.url }}" "$OUT_DIR"
-
-      # ==================== ساخت HTML تک‌فایلی با monolith ====================
       - name: Create monolithic HTML
         run: |
-          monolith "$CLEAN_URL" -o "$OUT_DIR/page_monolith.html" || \
-          monolith "$URL" -o "$OUT_DIR/page_monolith.html" || \
-          echo "Monolith failed, downloading raw HTML" && \
-          curl -sL "$URL" > "$OUT_DIR/page_monolith.html"
+          if ! monolith "$CLEAN_URL" -o "$OUT_DIR/page_monolith.html"; then
+            echo "Monolith with clean URL failed, trying original URL..."
+            if ! monolith "$URL" -o "$OUT_DIR/page_monolith.html"; then
+              echo "Monolith completely failed, downloading raw HTML as fallback..."
+              curl -sL -o "$OUT_DIR/page_monolith.html" "$URL"
+            fi
+          fi
 
-      # ==================== ایجاد آرشیو ZIP (حداکثر فشرده‌سازی) ====================
-      - name: Create ZIP archive
+      - name: Package output and save to backup
         run: |
-          cd "$OUT_DIR"
-          zip -9 -r "../../${FOLDER_NAME}.zip" .
-          cd ../..
-          echo "ZIP_FILE=${FOLDER_NAME}.zip" >> $GITHUB_ENV
+          OUT_DIR="${{ env.OUT_DIR }}"
+          FOLDER_NAME="${{ env.FOLDER_NAME }}"
+          ZIP_PASSWORD="${{ github.event.inputs.zip_password }}"
+          COMPRESSION_LEVEL=${{ github.event.inputs.compression_level }}
+          ENABLE_SPLIT="${{ github.event.inputs.enable_split }}"
+          SPLIT_PARTS=${{ github.event.inputs.split_parts }}
+          MAX_PART_SIZE_MB="${{ github.event.inputs.max_part_size_mb }}"
+          OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
 
-      # ==================== تولید README.md کامل ====================
-      - name: Generate README.md
+          BACKUP_DIR="/tmp/backup_$$"
+          rm -rf "$BACKUP_DIR"
+          mkdir -p "$BACKUP_DIR"
+          echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
+
+          cd "${OUT_DIR}/.."
+
+          ZIP_BASE="${FOLDER_NAME}"
+          ARCHIVE_PATH="${ZIP_BASE}.zip"
+          TOTAL_SIZE=$(du -sb "$FOLDER_NAME" | cut -f1)
+
+          USE_SPLIT=false
+          if [ "$ENABLE_SPLIT" = "true" ]; then
+            if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
+              SPLIT_SIZE="$MAX_PART_SIZE_MB"
+              USE_SPLIT=true
+            elif [ "$SPLIT_PARTS" -gt 1 ]; then
+              SPLIT_SIZE=$(echo "($TOTAL_SIZE + $SPLIT_PARTS - 1) / $SPLIT_PARTS / 1048576 + 1" | bc)
+              USE_SPLIT=true
+            fi
+          fi
+
+          [ "$COMPRESSION_LEVEL" -lt 1 ] || [ "$COMPRESSION_LEVEL" -gt 9 ] && COMPRESSION_LEVEL=6
+
+          if [ "$USE_SPLIT" = true ]; then
+            echo "Creating split ZIP with part size ${SPLIT_SIZE}MB"
+            if [ -n "$ZIP_PASSWORD" ]; then
+              zip -r -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" -s ${SPLIT_SIZE}m "${ARCHIVE_PATH}" "$FOLDER_NAME"
+            else
+              zip -r -${COMPRESSION_LEVEL} -s ${SPLIT_SIZE}m "${ARCHIVE_PATH}" "$FOLDER_NAME"
+            fi
+          else
+            if [ -n "$ZIP_PASSWORD" ]; then
+              zip -r -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" "${ARCHIVE_PATH}" "$FOLDER_NAME"
+            else
+              zip -r -${COMPRESSION_LEVEL} "${ARCHIVE_PATH}" "$FOLDER_NAME"
+            fi
+          fi
+
+          if [ "$OUTPUT_TYPE" = "zip_only" ]; then
+            rm -rf "$FOLDER_NAME"
+          elif [ "$OUTPUT_TYPE" = "folder_only" ]; then
+            rm -f "${ARCHIVE_PATH}" "${ARCHIVE_PATH}.z"* 2>/dev/null || true
+          fi
+
+          cp -r . "$BACKUP_DIR"
+          echo "Packaging done. Backup saved to $BACKUP_DIR"
+
+      - name: Generate links.txt and READMEs
         run: |
-          SHA256=$(sha256sum "BROWSER/${FOLDER_NAME}.zip" | awk '{print $1}')
-          SIZE=$(du -sh "BROWSER/${FOLDER_NAME}.zip" | cut -f1)
-          RAW_URL="https://github.com/${{ github.repository }}/raw/${{ github.ref_name }}/BROWSER/${FOLDER_NAME}.zip"
+          FOLDER_NAME="${{ env.FOLDER_NAME }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          BRANCH="${{ github.ref_name }}"
+          ZIP_PASSWORD="${{ github.event.inputs.zip_password }}"
+          COMPRESSION_LEVEL=${{ github.event.inputs.compression_level }}
+          OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
+          URL="${{ env.URL }}"
 
-          cat > "$OUT_DIR/README.md" << EOF
-          # ${FOLDER_NAME}
+          cd BROWSER
 
-          ---
+          # تعیین مقصد (پوشه یا فایل‌های zip)
+          if [ -d "$FOLDER_NAME" ]; then
+            TARGET_DIR="$FOLDER_NAME"
+          else
+            TARGET_DIR="."   # فایل‌ها در ریشه‌ی BROWSER هستند
+          fi
 
-          ## 📄 Page Information
-          | Property          | Value                          |
-          |-------------------|--------------------------------|
-          | **Original URL**   | \`${URL}\` |
-          | **Archive Name**   | \`${FOLDER_NAME}.zip\`                |
-          | **Total Size**     | ${SIZE}                        |
-          | **Status**         | ✅ Complete                    |
-          | **Password Protected** | NO |
-          | **SHA256 Checksum**| \`${SHA256}\`                  |
-          | **Compression Level** | 9 (maximum)                 |
+          HAS_ZIP=false
+          SHA256=""
+          SIZE=""
+          TOTAL_PARTS=0
+          DOWNLOAD_LINKS_MD=""
+          LINKS_TXT_CONTENT=""
 
-          ---
+          if compgen -G "${FOLDER_NAME}.zip" > /dev/null; then
+            HAS_ZIP=true
+            SHA256=$(sha256sum "${FOLDER_NAME}.zip" | awk '{print $1}')
+            SIZE=$(du -sh "${FOLDER_NAME}.zip" | cut -f1)
+            for part in ${FOLDER_NAME}.zip ${FOLDER_NAME}.z[0-9]*; do
+              [ -f "$part" ] || continue
+              TOTAL_PARTS=$((TOTAL_PARTS + 1))
+              part_name=$(basename "$part")
+              part_encoded=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$part_name'))")
+              raw_link="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/BROWSER/${part_encoded}"
+              DOWNLOAD_LINKS_MD+="| $TOTAL_PARTS | \`${part_name}\` | [Download](${raw_link}) |"$'\n'
+              LINKS_TXT_CONTENT+="${raw_link}"$'\n'
+            done
+          fi
 
-          ## 🔗 Download Links
-          | # | File | Link |
-          |---|------|------|
-          | 1 | \`${FOLDER_NAME}.zip\` | [Download](${RAW_URL}) |
+          # links.txt
+          {
+            if [ -n "$LINKS_TXT_CONTENT" ]; then
+              printf '%s' "$LINKS_TXT_CONTENT"
+            else
+              echo "No ZIP parts found. Folder accessible directly in repository."
+            fi
+          } > "${TARGET_DIR}/links.txt"
 
-          ---
+          # README.md (English)
+          {
+            echo "# ${FOLDER_NAME}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📄 Page Information"
+            echo "| Property            | Value                          |"
+            echo "|---------------------|--------------------------------|"
+            echo "| **Original URL**     | \`${URL}\`                     |"
+            echo "| **Output type**      | ${OUTPUT_TYPE}                 |"
+            echo "| **Password Protected** | $([ -n "$ZIP_PASSWORD" ] && echo "**YES**" || echo "NO") |"
+            echo "| **Compression Level** | ${COMPRESSION_LEVEL}           |"
+            [ "$HAS_ZIP" = true ] && echo "| **Total Size**       | ${SIZE} (${TOTAL_PARTS} part(s)) |"
+            [ "$HAS_ZIP" = true ] && echo "| **SHA256 (zip)**     | \`${SHA256}\` |"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 🔗 Download Links"
+            if [ "$HAS_ZIP" = true ]; then
+              echo "| # | File | Link |"
+              echo "|---|------|------|"
+              printf '%s' "$DOWNLOAD_LINKS_MD"
+              echo ""
+              echo "**💡 Tip:** For batch downloading, use the direct URLs listed in [\`links.txt\`](./links.txt)."
+            else
+              echo "Folder available directly in repository."
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📦 Contents"
+            echo "- \`index.html\` – Full rendered HTML (from Playwright)"
+            echo "- \`screenshot.png\` – Full‑page long screenshot"
+            echo "- \`page.pdf\` – Printable PDF"
+            echo "- \`assets/\` – Front‑end resources (filtered to main domain)"
+            echo "- \`page_monolith.html\` – Self‑contained HTML"
+            echo "- \`all_links.json\` – Extracted links"
+            echo "- \`links.txt\` – Direct download URLs for batch download"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📦 How to Use"
+            if [ "$OUTPUT_TYPE" = "zip_only" ]; then
+              echo "1. **Download** all ZIP parts."
+              echo "2. **Extract** – parts combine automatically."
+              echo "3. **Explore** the extracted folder."
+            else
+              echo "1. **Download** the ZIP file (or folder)."
+              echo "2. **Extract** if needed."
+              echo "3. **Open** \`index.html\` or \`page_monolith.html\`."
+            fi
+            echo "4. **Verify** integrity using SHA256 checksum."
+            echo ""
+            echo "*Powered by [MR.MMD2019](https://github.com/MRmmd2019)*"
+          } > "${TARGET_DIR}/README.md"
 
-          ## 📦 Contents
-          - \`index.html\` – Full rendered HTML (from Playwright)
-          - \`screenshot.png\` – Full‑page long screenshot (with auto-scroll)
-          - \`page.pdf\` – Printable PDF (using print stylesheet)
-          - \`assets/\` – All front‑end resources (CSS, JS, images, fonts) saved locally
-          - \`page_monolith.html\` – Self‑contained single HTML (inline CSS/images)
-          - \`all_links.json\` – All links extracted from the page
+          # README_FA.md (Persian)
+          {
+            echo "# ${FOLDER_NAME}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📄 اطلاعات صفحه"
+            echo "| ویژگی               | مقدار                         |"
+            echo "|---------------------|-------------------------------|"
+            echo "| **لینک اصلی**       | \`${URL}\`                     |"
+            echo "| **نوع خروجی**       | ${OUTPUT_TYPE}                 |"
+            echo "| **محافظت با رمز**   | $([ -n "$ZIP_PASSWORD" ] && echo "**بله**" || echo "خیر") |"
+            echo "| **سطح فشرده‌سازی**  | ${COMPRESSION_LEVEL}           |"
+            [ "$HAS_ZIP" = true ] && echo "| **حجم کل**           | ${SIZE} (${TOTAL_PARTS} بخش) |"
+            [ "$HAS_ZIP" = true ] && echo "| **SHA256 (zip)**     | \`${SHA256}\` |"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 🔗 لینک‌های دانلود"
+            if [ "$HAS_ZIP" = true ]; then
+              echo "| # | فایل | لینک |"
+              echo "|---|------|------|"
+              printf '%s' "$DOWNLOAD_LINKS_MD"
+              echo ""
+              echo "**💡 نکته:** برای دانلود دسته‌ای از لینک‌های داخل [\`links.txt\`](./links.txt) استفاده کنید."
+            else
+              echo "پوشه مستقیماً در ریپازیتوری در دسترس است."
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📦 محتویات"
+            echo "- \`index.html\` – HTML رندر شده (Playwright)"
+            echo "- \`screenshot.png\` – اسکرین‌شات تمام‌صفحه"
+            echo "- \`page.pdf\` – PDF قابل چاپ"
+            echo "- \`assets/\` – منابع فرانت‌اند (محدود به دامنه اصلی)"
+            echo "- \`page_monolith.html\` – HTML تک‌فایلی"
+            echo "- \`all_links.json\` – لینک‌های استخراج‌شده"
+            echo "- \`links.txt\` – لینک‌های مستقیم دانلود"
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📦 روش استفاده"
+            if [ "$OUTPUT_TYPE" = "zip_only" ]; then
+              echo "1. **دانلود:** تمام بخش‌های ZIP را دانلود کنید."
+              echo "2. **استخراج:** بخش‌ها خودکار ترکیب می‌شوند."
+              echo "3. **مشاهده:** وارد پوشه استخراج‌شده شوید."
+            else
+              echo "1. **دانلود:** فایل ZIP (یا پوشه) را دریافت کنید."
+              echo "2. **استخراج:** در صورت نیاز استخراج کنید."
+              echo "3. **باز کردن:** \`index.html\` یا \`page_monolith.html\` را باز کنید."
+            fi
+            echo "4. **بررسی صحت:** از چکسام SHA256 استفاده کنید."
+            echo ""
+            echo "*نیرو گرفته از [MR.MMD2019](https://github.com/MRmmd2019)*"
+          } > "${TARGET_DIR}/README_FA.md"
 
-          ---
+          # به‌روزرسانی BACKUP_DIR
+          if [ -n "${{ env.BACKUP_DIR }}" ] && [ -d "${{ env.BACKUP_DIR }}" ]; then
+            cp -r . "${{ env.BACKUP_DIR }}"
+          fi
+          echo "READMEs and links.txt generated."
 
-          ## 📦 How to Use
-          1. Download the ZIP file from the link above.
-          2. Open \`page_monolith.html\` for a clean, offline reading experience (all styles & images embedded).
-          3. If you need the exact original experience, open \`index.html\` while keeping the \`assets/\` folder in the same directory.
-          4. Refer to \`screenshot.png\` for a full‑page visual snapshot (with auto-scroll).
-          5. Use \`page.pdf\` for printing or permanent archiving.
-          6. Verify integrity using the SHA256 checksum above.
-
-          ---
-
-          *Powered by [MR.MMD2019](https://github.com/MRmmd2019)*
-          EOF
-
-      # ==================== ذخیره در مخزن ====================
-      - name: Commit and Push
+      - name: Incremental Commit & Push
         run: |
+          BACKUP_DIR="${{ env.BACKUP_DIR }}"
+          BRANCH="${{ github.ref_name }}"
+          FOLDER_NAME="${{ env.FOLDER_NAME }}"
+
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add BROWSER/
-          git commit -m "Add extracted page: ${FOLDER_NAME}" || true
-          git push
+
+          git fetch origin "$BRANCH"
+          git reset --hard origin/"$BRANCH"
+
+          mkdir -p BROWSER
+          if [ -d "$BACKUP_DIR" ]; then
+            cp -r "$BACKUP_DIR"/* BROWSER/ 2>/dev/null || true
+          fi
+
+          ALL_FILES=()
+          while IFS= read -r -d '' f; do ALL_FILES+=("$f"); done < <(find BROWSER -type f -print0 | sort -z)
+
+          if [ ${#ALL_FILES[@]} -eq 0 ]; then
+            echo "Nothing to push."
+            exit 0
+          fi
+
+          push_batch() {
+            local batch=("$@")
+            for f in "${batch[@]}"; do git add "$f" 2>/dev/null || true; done
+            if ! git diff --cached --quiet; then
+              git commit -m "[Bot] Add extracted page: ${FOLDER_NAME} [skip ci]" --quiet
+              local retry=0
+              while [ $retry -lt 5 ]; do
+                if timeout 180 git push origin HEAD:"$BRANCH"; then
+                  echo "Batch pushed successfully."
+                  return 0
+                else
+                  echo "Push failed, attempt $((retry+1))/5..."
+                  sleep $(( RANDOM % 10 + 5 ))
+                  git fetch origin "$BRANCH" --quiet
+                  if ! git rebase origin/"$BRANCH" --quiet; then
+                    echo "Rebase conflict – aborting batch."
+                    git rebase --abort
+                    return 1
+                  fi
+                fi
+                retry=$((retry+1))
+              done
+              return 1
+            fi
+          }
+
+          batch=()
+          for file in "${ALL_FILES[@]}"; do
+            batch+=("$file")
+            if [ ${#batch[@]} -ge 3 ]; then
+              push_batch "${batch[@]}" || { echo "❌ Push batch failed!"; exit 1; }
+              batch=()
+            fi
+          done
+          if [ ${#batch[@]} -gt 0 ]; then
+            push_batch "${batch[@]}" || { echo "❌ Push final batch failed!"; exit 1; }
+          fi
+
+          echo "✅ All files pushed successfully."

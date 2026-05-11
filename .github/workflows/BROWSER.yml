@@ -66,11 +66,10 @@ jobs:
           echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
           echo "URL=$URL" >> $GITHUB_ENV
 
-          # استخراج URL اصلی برای monolith (حذف پارامترهای پیچیده)
           CLEAN_URL=$(echo "$URL" | sed 's/\?.*//')
           echo "CLEAN_URL=$CLEAN_URL" >> $GITHUB_ENV
 
-      # ==================== استخراج کامل صفحه با Playwright ====================
+      # ==================== استخراج کامل صفحه با Playwright (اسکریپت inline) ====================
       - name: Extract page with Playwright
         run: |
           cat > extract.js << 'SCRIPT'
@@ -127,7 +126,7 @@ jobs:
             await page.evaluate(async () => {
               await new Promise((resolve) => {
                 let totalHeight = 0;
-                const distance = 400; // گام اسکرول
+                const distance = 400;
                 const timer = setInterval(() => {
                   const scrollHeight = document.body.scrollHeight;
                   window.scrollBy(0, distance);
@@ -136,38 +135,29 @@ jobs:
                     clearInterval(timer);
                     resolve();
                   }
-                }, 10); // هر ۱۰ms اسکرول کن
+                }, 10);
               });
             });
-            // صبر کوتاه برای بارگذاری تصاویر نهایی
             await page.waitForTimeout(2000);
 
-            // ========== ۴. استخراج تمام لینک‌های موجود در صفحه ==========
+            // ========== ۴. برگشت به بالای صفحه برای گرفتن اسکرین‌شات کامل ==========
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.waitForTimeout(500); // کمی صبر برای رندر نهایی در بالای صفحه
+
+            // ========== ۵. استخراج تمام لینک‌های موجود در صفحه ==========
             const allLinks = await page.evaluate(() => {
               const links = [];
-              document.querySelectorAll('a').forEach(a => {
-                if (a.href) links.push(a.href);
-              });
-              document.querySelectorAll('link').forEach(link => {
-                if (link.href) links.push(link.href);
-              });
-              document.querySelectorAll('script').forEach(script => {
-                if (script.src) links.push(script.src);
-              });
-              document.querySelectorAll('img').forEach(img => {
-                if (img.src) links.push(img.src);
-              });
-              document.querySelectorAll('video, audio, source').forEach(el => {
-                if (el.src) links.push(el.src);
-              });
-              document.querySelectorAll('iframe').forEach(iframe => {
-                if (iframe.src) links.push(iframe.src);
-              });
+              document.querySelectorAll('a').forEach(a => { if (a.href) links.push(a.href); });
+              document.querySelectorAll('link').forEach(link => { if (link.href) links.push(link.href); });
+              document.querySelectorAll('script').forEach(script => { if (script.src) links.push(script.src); });
+              document.querySelectorAll('img').forEach(img => { if (img.src) links.push(img.src); });
+              document.querySelectorAll('video, audio, source').forEach(el => { if (el.src) links.push(el.src); });
+              document.querySelectorAll('iframe').forEach(iframe => { if (iframe.src) links.push(iframe.src); });
               return [...new Set(links)]; // حذف تکراری‌ها
             });
             fs.writeFileSync(path.join(outDir, 'all_links.json'), JSON.stringify(allLinks, null, 2));
 
-            // ========== ۵. لانگ اسکرین کامل (full-page screenshot) ==========
+            // ========== ۶. لانگ اسکرین کامل (full-page screenshot) ==========
             try {
               await page.screenshot({
                 path: path.join(outDir, 'screenshot.png'),
@@ -183,20 +173,47 @@ jobs:
               });
             }
 
-            // ========== ۶. ذخیره HTML نهایی صفحه ==========
+            // ========== ۷. ذخیره HTML نهایی صفحه ==========
             const html = await page.content();
             fs.writeFileSync(path.join(outDir, 'index.html'), html);
 
-            // ========== ۷. خروجی PDF با استفاده از print stylesheet ==========
+            // ========== ۸. خروجی PDF با استفاده از پروتکل DevTools (PrintToPDF) ==========
             try {
-              await page.pdf({
-                path: path.join(outDir, 'page.pdf'),
-                format: 'A4',
-                printBackground: true,
-                timeout: 120000
+              // تنظیم راست‌چین برای متن فارسی
+              await page.evaluate(() => {
+                document.body.style.direction = 'rtl';
               });
+
+              const session = await page.context().newCDPSession(page);
+              const result = await session.send('Page.printToPDF', {
+                printBackground: true,
+                preferCSSPageSize: true,
+                displayHeaderFooter: false,
+                marginTop: '0.4in',
+                marginBottom: '0.4in',
+                marginLeft: '0.4in',
+                marginRight: '0.4in',
+                landscape: false,
+                transferMode: 'ReturnAsStream'
+              });
+
+              const stream = result.stream;
+              const pdfData = await session.send('IO.read', { handle: stream });
+              fs.writeFileSync(path.join(outDir, 'page.pdf'), Buffer.from(pdfData.data, 'base64'));
+              await session.send('IO.close', { handle: stream });
+              console.log('PDF generated successfully using CDP PrintToPDF');
             } catch (pdfErr) {
-              console.error('PDF generation failed:', pdfErr.message);
+              console.error('CDP PDF generation failed, trying standard method:', pdfErr.message);
+              try {
+                await page.pdf({
+                  path: path.join(outDir, 'page.pdf'),
+                  format: 'A4',
+                  printBackground: true,
+                  timeout: 120000
+                });
+              } catch (standardPdfErr) {
+                console.error('Standard PDF generation also failed:', standardPdfErr.message);
+              }
             }
 
             await browser.close();
@@ -205,12 +222,10 @@ jobs:
 
           node extract.js "${{ github.event.inputs.url }}" "$OUT_DIR"
 
-      # ==================== ساخت HTML تک‌فایلی با monolith (با URL تمیز) ====================
+      # ==================== ساخت HTML تک‌فایلی با monolith ====================
       - name: Create monolithic HTML
         run: |
-          # ابتدا با URL اصلی (تمیز) امتحان کن
           monolith "$CLEAN_URL" -o "$OUT_DIR/page_monolith.html" || \
-          # در صورت شکست، با URL کامل امتحان کن
           monolith "$URL" -o "$OUT_DIR/page_monolith.html" || \
           echo "Monolith failed, downloading raw HTML" && \
           curl -sL "$URL" > "$OUT_DIR/page_monolith.html"

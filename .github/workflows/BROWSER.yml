@@ -19,48 +19,128 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
+      # ==================== پیش‌نیازهای سیستم ====================
       - name: Setup system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl zip
+          sudo apt-get install -y curl zip wget
 
+      # ==================== نصب Node.js و Playwright ====================
       - name: Setup Node.js and Playwright
         run: |
           npm init -y
           npm install playwright
           npx playwright install --with-deps chromium
 
+      # ==================== نصب monolith (روش مقاوم) ====================
       - name: Setup monolith
         run: |
-          # Install monolith binary
-          curl -L https://github.com/Y2Z/monolith/releases/download/v2.10.1/monolith-v2.10.1-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          sudo mv monolith /usr/local/bin/
-          echo "Monolith installed"
+          # تلاش برای دریافت آخرین نسخه از API گیت‌هاب
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Y2Z/monolith/releases/latest | \
+            grep "browser_download_url.*x86_64-unknown-linux-gnu" | \
+            cut -d '"' -f 4)
 
-      - name: Extract page with Playwright
-        run: node extract.js "${{ github.event.inputs.url }}"
+          if [ -n "$DOWNLOAD_URL" ]; then
+            echo "Downloading from: $DOWNLOAD_URL"
+            wget "$DOWNLOAD_URL" -O monolith.tar.gz
+            tar xzf monolith.tar.gz
+            sudo mv monolith /usr/local/bin/
+          else
+            echo "Falling back to cargo install..."
+            sudo apt-get install -y cargo
+            cargo install monolith
+          fi
 
-      - name: Create monolithic HTML
+          monolith --version
+          echo "Monolith installed successfully"
+
+      # ==================== آماده‌سازی نام پوشه مقصد ====================
+      - name: Prepare output directory
+        id: prep
         run: |
           URL="${{ github.event.inputs.url }}"
           DOMAIN=$(echo "$URL" | awk -F/ '{print $3}' | sed 's/^www\.//')
           FOLDER_NAME="${DOMAIN}_$(date +%Y%m%d_%H%M%S)"
           OUT_DIR="BROWSER/${FOLDER_NAME}"
-          mkdir -p "$OUT_DIR"
-          monolith "$URL" -o "$OUT_DIR/page_monolith.html"
+          mkdir -p "$OUT_DIR/assets"
           echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
           echo "FOLDER_NAME=$FOLDER_NAME" >> $GITHUB_ENV
           echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
           echo "URL=$URL" >> $GITHUB_ENV
 
-      - name: Move extracted assets to same folder
+      # ==================== استخراج با Playwright ====================
+      - name: Extract page with Playwright
         run: |
-          TEMP_DIR=$(ls -d BROWSER/tmp_* 2>/dev/null | head -1)
-          if [ -d "$TEMP_DIR" ]; then
-            mv "$TEMP_DIR"/* "$OUT_DIR/"
-            rm -rf "$TEMP_DIR"
-          fi
+          cat > extract.js << 'SCRIPT'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const path = require('path');
 
+          const url = process.argv[2];
+          const outDir = process.argv[3];
+
+          function sanitizeFilename(urlPath) {
+            return decodeURIComponent(urlPath)
+              .replace(/[<>:"|?*]/g, '_')
+              .replace(/\/$/, '/index.html');
+          }
+
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+
+            // ذخیره منابع استاتیک (CSS، JS، تصاویر، فونت، JSON)
+            page.on('response', async (response) => {
+              if (response.status() === 200) {
+                const headers = response.headers();
+                const contentType = headers['content-type'] || '';
+                if (
+                  contentType.includes('text/css') ||
+                  contentType.includes('application/javascript') ||
+                  contentType.includes('image/') ||
+                  contentType.includes('font') ||
+                  contentType.includes('application/json')
+                ) {
+                  try {
+                    const buffer = await response.body();
+                    const respUrl = new URL(response.url());
+                    const cleanPath = sanitizeFilename(respUrl.pathname);
+                    const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
+                    fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+                    fs.writeFileSync(assetPath, buffer);
+                  } catch (e) {
+                    // از خطاهای غیرقابل اجتناب (مانند Stream closed) چشم‌پوشی کن
+                  }
+                }
+              }
+            });
+
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+
+            // اسکرین‌شات تمام‌صفحه
+            await page.screenshot({
+              path: path.join(outDir, 'screenshot.png'),
+              fullPage: true,
+            });
+
+            // HTML نهایی
+            const html = await page.content();
+            fs.writeFileSync(path.join(outDir, 'index.html'), html);
+
+            await browser.close();
+          })();
+          SCRIPT
+
+          node extract.js "${{ github.event.inputs.url }}" "$OUT_DIR"
+
+      # ==================== ساخت HTML تک‌فایلی با monolith ====================
+      - name: Create monolithic HTML
+        run: |
+          monolith "$URL" -o "$OUT_DIR/page_monolith.html" || \
+          echo "Monolith failed, downloading raw HTML" && \
+          curl -sL "$URL" > "$OUT_DIR/page_monolith.html"
+
+      # ==================== ایجاد آرشیو ZIP ====================
       - name: Create ZIP archive (max compression)
         run: |
           cd "$OUT_DIR"
@@ -68,13 +148,14 @@ jobs:
           cd ../..
           echo "ZIP_FILE=${FOLDER_NAME}.zip" >> $GITHUB_ENV
 
+      # ==================== تولید README.md ====================
       - name: Generate README.md
         run: |
           SHA256=$(sha256sum "BROWSER/${FOLDER_NAME}.zip" | awk '{print $1}')
           SIZE=$(du -sh "BROWSER/${FOLDER_NAME}.zip" | cut -f1)
           RAW_URL="https://github.com/${{ github.repository }}/raw/${{ github.ref_name }}/BROWSER/${FOLDER_NAME}.zip"
 
-          cat > "$OUT_DIR/README.md" << 'EOF'
+          cat > "$OUT_DIR/README.md" << EOF
           # ${FOLDER_NAME}
 
           ---
@@ -92,7 +173,7 @@ jobs:
 
           ---
 
-          ## 🔗 Download Link (ZIP Archive)
+          ## 🔗 Download Links
           | # | File | Link |
           |---|------|------|
           | 1 | \`${FOLDER_NAME}.zip\` | [Download](${RAW_URL}) |
@@ -108,21 +189,22 @@ jobs:
           ---
 
           ## 📦 How to Use
-          1. Download the ZIP file.
+          1. Download the ZIP file from the link above.
           2. Open \`page_monolith.html\` for a clean, offline reading experience (all styles & images embedded).
-          3. Or open \`index.html\` and ensure the \`assets/\` folder is in the same directory to see the exact original page.
-          4. Refer to \`screenshot.png\` for a visual snapshot.
-          5. Verify integrity with the SHA256 checksum above.
+          3. If you need the exact original experience, open \`index.html\` while keeping the \`assets/\` folder in the same directory.
+          4. Refer to \`screenshot.png\` for a full‑page visual snapshot.
+          5. Verify integrity using the SHA256 checksum above.
 
           ---
 
           *Powered by [MR.MMD2019](https://github.com/MRmmd2019)*
           EOF
 
+      # ==================== ذخیره در مخزن ====================
       - name: Commit and Push
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add BROWSER/
-          git commit -m "Add extracted page ${{ github.event.inputs.url }}" || true
+          git commit -m "Add extracted page: ${FOLDER_NAME}" || true
           git push

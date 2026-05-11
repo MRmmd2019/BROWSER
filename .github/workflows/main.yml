@@ -1,25 +1,27 @@
-name: "Universal Video/Audio Downloader (yt‑dlp + aria2 + ffmpeg)"
+name: "🎬 Universal Media Downloader (Push to Repo)"
 
 on:
   workflow_dispatch:
     inputs:
+      # --- Mode ---
       download_video:
-        description: "✅ تیک بزنید → دانلود ویدیو | ❌ تیک نخورده → دانلود صوت"
+        description: "✅ تیک بزنید → ویدیو | ❌ خالی → صوت"
         type: boolean
         default: true
 
       url:
-        description: "🔗 لینک ویدیو یا صوت را وارد کنید"
+        description: "🔗 لینک ویدیو/صوت"
         type: string
         required: true
 
       cookies:
-        description: "🍪 محتوای فایل کوکی (Netscape format) - اختیاری (در صورت نیاز)"
+        description: "🍪 محتوای کوکی (Netscape) - اختیاری"
         type: string
         default: ""
 
+      # --- General options ---
       list_supported_sites:
-        description: "📋 نمایش تمام سایت‌های پشتیبانی‌شده (خروجی txt)"
+        description: "📋 لیست سایت‌های پشتیبانی‌شده (txt)"
         type: boolean
         default: false
 
@@ -29,33 +31,33 @@ on:
         default: "30"
 
       retries:
-        description: "🔁 تعداد تلاش مجدد (۱ تا ۱۰)"
+        description: "🔁 تعداد تلاش مجدد (۱-۱۰)"
         type: number
         default: 10
 
       fragment_retries:
-        description: "🔂 تلاش مجدد برای هر قطعه (۱ تا ۱۰)"
+        description: "🔂 تلاش مجدد برای هر قطعه (۱-۱۰)"
         type: number
         default: 10
 
       extractor_retries:
-        description: "🛠 تلاش مجدد در صورت خطای دسترسی به فایل (۱ تا ۱۰)"
+        description: "🛠 تلاش مجدد در خطای دسترسی (۱-۱۰)"
         type: number
         default: 3
 
-      # --- ویدیو ---
+      # --- Video ---
       output_template:
-        description: "📁 الگوی نام فایل خروجی (default = پوشه خودکار)"
+        description: "📁 الگوی نام فایل (default = پوشه خودکار)"
         type: string
         default: "default"
 
       embed_metadata:
-        description: "🏷 نوشتن متادیتا در فایل"
+        description: "🏷 درج متادیتا در فایل"
         type: boolean
         default: false
 
       write_description:
-        description: "📝 ذخیره توضیحات در فایل .description"
+        description: "📝 ذخیره توضیحات (.description)"
         type: boolean
         default: false
 
@@ -65,12 +67,12 @@ on:
         default: false
 
       list_formats:
-        description: "📊 فقط نمایش فرمت‌های موجود (بدون دانلود)"
+        description: "📊 فقط نمایش فرمت‌ها (بدون دانلود)"
         type: boolean
         default: false
 
       format_choice:
-        description: "🎞 انتخاب فرمت ویدیو (custom = ورودی دلخواه)"
+        description: "🎞 فرمت ویدیو"
         type: choice
         options:
           - best
@@ -81,13 +83,13 @@ on:
         default: "best"
 
       custom_format:
-        description: "✏ فرمت دلخواه (مثلاً bestvideo[height<=1080]+bestaudio)"
+        description: "✏ فرمت دلخواه (اگر custom)"
         type: string
         default: ""
 
-      # --- صوت ---
+      # --- Audio ---
       audio_quality_choice:
-        description: "🎵 کیفیت صدا (best / kbps / custom)"
+        description: "🎵 کیفیت صدا"
         type: choice
         options:
           - best
@@ -100,12 +102,12 @@ on:
         default: "best"
 
       custom_audio_quality:
-        description: "✏ کیفیت دلخواه (مثلاً 192K)"
+        description: "✏ کیفیت دلخواه (اگر custom)"
         type: string
         default: ""
 
       audio_format_choice:
-        description: "🎧 فرمت صدا (best / mp3 / m4a / ...)"
+        description: "🎧 فرمت صدا"
         type: choice
         options:
           - best
@@ -120,268 +122,361 @@ on:
         default: "best"
 
       custom_audio_format:
-        description: "✏ فرمت صوتی دلخواه (اگر custom انتخاب شده)"
+        description: "✏ فرمت صوتی دلخواه (اگر custom)"
         type: string
         default: ""
 
       embed_thumbnail:
-        description: "🖼 قرار دادن کاور در فایل صوتی"
+        description: "🖼 الصاق کاور به فایل صوتی"
         type: boolean
         default: false
 
-jobs:
-  download:
-    runs-on: ubuntu-latest
+      # --- Split & push ---
+      split_threshold_mb:
+        description: "📦 حداکثر حجم هر بخش (MB) - پیش‌فرض 45"
+        type: number
+        default: 45
 
-    env:
-      URL: ${{ inputs.url }}
-      DOWNLOAD_VIDEO: ${{ inputs.download_video }}
-      COOKIES: ${{ inputs.cookies }}
-      LIST_SUPPORTED_SITES: ${{ inputs.list_supported_sites }}
-      LIST_FORMATS: ${{ inputs.list_formats }}
-      CONNECT_TIMEOUT: ${{ inputs.connect_timeout }}
-      RETRIES: ${{ inputs.retries }}
-      FRAGMENT_RETRIES: ${{ inputs.fragment_retries }}
-      EXTRACTOR_RETRIES: ${{ inputs.extractor_retries }}
-      OUTPUT_TEMPLATE: ${{ inputs.output_template }}
-      EMBED_METADATA: ${{ inputs.embed_metadata }}
-      WRITE_DESCRIPTION: ${{ inputs.write_description }}
-      WRITE_ALL_THUMBNAILS: ${{ inputs.write_all_thumbnails }}
-      FORMAT_CHOICE: ${{ inputs.format_choice }}
-      CUSTOM_FORMAT: ${{ inputs.custom_format }}
-      AUDIO_QUALITY_CHOICE: ${{ inputs.audio_quality_choice }}
-      CUSTOM_AUDIO_QUALITY: ${{ inputs.custom_audio_quality }}
-      AUDIO_FORMAT_CHOICE: ${{ inputs.audio_format_choice }}
-      CUSTOM_AUDIO_FORMAT: ${{ inputs.custom_audio_format }}
-      EMBED_THUMBNAIL: ${{ inputs.embed_thumbnail }}
+      zip_password:
+        description: "🔐 رمز فایل zip (اختیاری)"
+        type: string
+        default: ""
+
+jobs:
+  download-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
 
     steps:
-      - name: 🧰 نصب وابستگی‌ها (ffmpeg, aria2, yt-dlp)
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: ⚙️ پیکربندی گیت برای فایل‌های حجیم
+        run: |
+          git config --global http.postBuffer 524288000
+          git config --global http.maxRequestBuffer 100M
+          git config --global core.compression 0
+          git config --global pack.windowMemory 256m
+          git config --global pack.packSizeLimit 100m
+          git config --global pack.threads 1
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: 📦 نصب وابستگی‌ها
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg aria2
+          sudo apt-get install -y ffmpeg aria2 zip curl bc
           pip install -q yt-dlp
 
-      - name: 🍪 ذخیره کوکی در فایل (در صورت ارائه)
-        if: env.COOKIES != ''
-        run: echo "$COOKIES" > cookies.txt
+      - name: 🧠 آماده‌سازی متغیرها و پوشه‌ها
+        id: vars
+        run: |
+          echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
+          echo "REPO_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
+          echo "BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
 
-      - name: 📋 لیست سایت‌های پشتیبانی‌شده (در صورت درخواست)
-        if: env.LIST_SUPPORTED_SITES == 'true'
+          BACKUP_DIR="/tmp/download_backup_$$"
+          mkdir -p "$BACKUP_DIR"
+          echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
+
+          if [ "${{ inputs.download_video }}" = "true" ]; then
+            MODE="video"
+            ROOT_FOLDER="VIDEO"
+          else
+            MODE="audio"
+            ROOT_FOLDER="AUDIO"
+          fi
+          echo "MODE=$MODE" >> $GITHUB_ENV
+          echo "ROOT_FOLDER=$ROOT_FOLDER" >> $GITHUB_ENV
+
+          SPLIT_THRESHOLD_MB=${{ inputs.split_threshold_mb }}
+          echo "SPLIT_THRESHOLD_MB=$SPLIT_THRESHOLD_MB" >> $GITHUB_ENV
+
+          echo "ZIP_PASSWORD=${{ inputs.zip_password }}" >> $GITHUB_ENV
+
+      - name: 📋 لیست سایت‌های پشتیبانی (در صورت درخواست)
+        if: inputs.list_supported_sites == 'true'
         run: |
           yt-dlp --list-extractors > supported_sites.txt
           echo "supported_sites.txt تولید شد"
 
       - name: 📊 نمایش فرمت‌های موجود (در صورت درخواست)
-        if: env.LIST_FORMATS == 'true'
+        if: inputs.list_formats == 'true'
         run: |
-          yt-dlp -F "$URL" || echo "⚠️ دریافت فرمت‌ها ممکن نیست"
+          yt-dlp -F "${{ inputs.url }}" || echo "⚠️ دریافت فرمت‌ها ممکن نیست"
         continue-on-error: true
 
       - name: 🗂 آماده‌سازی الگوی نام فایل
-        id: prepare
         run: |
-          if [ "$DOWNLOAD_VIDEO" = "true" ]; then
+          if [ "$MODE" = "video" ]; then
             FOLDER="VIDEO"
             DEF_TEMPLATE="VIDEO/%(title)s/%(title)s.%(ext)s"
           else
             FOLDER="AUDIO"
             DEF_TEMPLATE="AUDIO/%(title)s/%(title)s.%(ext)s"
           fi
-          if [ "$OUTPUT_TEMPLATE" = "default" ]; then
+          if [ "${{ inputs.output_template }}" = "default" ]; then
             OUT="$DEF_TEMPLATE"
           else
-            OUT="$OUTPUT_TEMPLATE"
+            OUT="${{ inputs.output_template }}"
           fi
-          echo "OUTPUT=$OUT" >> $GITHUB_ENV
-          echo "FOLDER=$FOLDER" >> $GITHUB_ENV
+          echo "OUTPUT_TEMPLATE=$OUT" >> $GITHUB_ENV
 
-      - name: ⬇️ دانلود (ویدیو یا صوت) با هدرهای مرورگر
-        if: env.LIST_FORMATS != 'true'
+      - name: ⬇️ دانلود با yt‑dlp
+        if: inputs.list_formats != 'true'
         run: |
-          # ساخت دستور پایه
-          CMD="yt-dlp --no-mtime --socket-timeout $CONNECT_TIMEOUT --retries $RETRIES --fragment-retries $FRAGMENT_RETRIES --extractor-retries $EXTRACTOR_RETRIES --output \"$OUTPUT\""
+          URL="${{ inputs.url }}"
+          CMD="yt-dlp --no-mtime --socket-timeout ${{ inputs.connect_timeout }} --retries ${{ inputs.retries }} --fragment-retries ${{ inputs.fragment_retries }} --extractor-retries ${{ inputs.extractor_retries }} --output \"$OUTPUT_TEMPLATE\""
 
-          # افزودن User-Agent شبیه‌سازی‌شده مرورگر Chrome
+          # مرورگرنما کردن درخواست
           CMD="$CMD --user-agent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\""
-
-          # افزودن هدرهای استاندارد مرورگر
           CMD="$CMD --add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\""
           CMD="$CMD --add-header \"Accept-Language: en-US,en;q=0.5\""
           CMD="$CMD --add-header \"Sec-Fetch-Dest: document\""
           CMD="$CMD --add-header \"Sec-Fetch-Mode: navigate\""
           CMD="$CMD --add-header \"Sec-Fetch-Site: none\""
           CMD="$CMD --add-header \"Sec-Fetch-User: ?1\""
-          CMD="$CMD --referer \"$URL\""   # ارجاع‌دهنده معتبر
+          CMD="$CMD --referer \"$URL\""
 
-          # فعال‌سازی aria2 در صورت وجود
           if command -v aria2c &> /dev/null; then
             CMD="$CMD --downloader aria2c"
           fi
 
-          # استفاده از کوکی در صورت وجود
-          if [ -f cookies.txt ]; then
+          if [ -n "${{ inputs.cookies }}" ]; then
+            echo "${{ inputs.cookies }}" > cookies.txt
             CMD="$CMD --cookies cookies.txt"
           fi
 
-          if [ "$DOWNLOAD_VIDEO" = "true" ]; then
-            # ------------------- حالت ویدیو -------------------
-            case "$FORMAT_CHOICE" in
-              custom) FORMAT="$CUSTOM_FORMAT" ;;
-              *)      FORMAT="$FORMAT_CHOICE" ;;
+          if [ "$MODE" = "video" ]; then
+            case "${{ inputs.format_choice }}" in
+              custom) FORMAT="${{ inputs.custom_format }}" ;;
+              *)      FORMAT="${{ inputs.format_choice }}" ;;
             esac
             CMD="$CMD --format \"$FORMAT\""
-
-            [ "$EMBED_METADATA" = "true" ]      && CMD="$CMD --embed-metadata"
-            [ "$WRITE_DESCRIPTION" = "true" ]   && CMD="$CMD --write-description"
-            [ "$WRITE_ALL_THUMBNAILS" = "true" ] && CMD="$CMD --write-all-thumbnails"
+            [ "${{ inputs.embed_metadata }}" = "true" ]      && CMD="$CMD --embed-metadata"
+            [ "${{ inputs.write_description }}" = "true" ]   && CMD="$CMD --write-description"
+            [ "${{ inputs.write_all_thumbnails }}" = "true" ] && CMD="$CMD --write-all-thumbnails"
           else
-            # ------------------- حالت صوت -------------------
             CMD="$CMD --extract-audio --format bestaudio/best"
-
-            case "$AUDIO_FORMAT_CHOICE" in
+            case "${{ inputs.audio_format_choice }}" in
               best)  ;;
-              custom) CMD="$CMD --audio-format $CUSTOM_AUDIO_FORMAT" ;;
-              *)      CMD="$CMD --audio-format $AUDIO_FORMAT_CHOICE" ;;
+              custom) CMD="$CMD --audio-format ${{ inputs.custom_audio_format }}" ;;
+              *)      CMD="$CMD --audio-format ${{ inputs.audio_format_choice }}" ;;
             esac
-
-            case "$AUDIO_QUALITY_CHOICE" in
+            case "${{ inputs.audio_quality_choice }}" in
               best)   AQ=0 ;;
-              custom) AQ="$CUSTOM_AUDIO_QUALITY" ;;
-              *)      AQ="$AUDIO_QUALITY_CHOICE" ;;
+              custom) AQ="${{ inputs.custom_audio_quality }}" ;;
+              *)      AQ="${{ inputs.audio_quality_choice }}" ;;
             esac
             CMD="$CMD --audio-quality $AQ"
-
-            [ "$EMBED_METADATA" = "true" ]   && CMD="$CMD --embed-metadata"
-            [ "$EMBED_THUMBNAIL" = "true" ]  && CMD="$CMD --embed-thumbnail"
+            [ "${{ inputs.embed_metadata }}" = "true" ]   && CMD="$CMD --embed-metadata"
+            [ "${{ inputs.embed_thumbnail }}" = "true" ]  && CMD="$CMD --embed-thumbnail"
           fi
 
           CMD="$CMD \"$URL\""
-          echo "▶️ اجرا: $CMD"
+          echo "▶️ $CMD"
           eval $CMD
 
-      - name: 📖 ساخت فایل‌های راهنما (فارسی و انگلیسی)
+          # انتقال فایل‌های دانلودشده به backup_dir
+          mkdir -p "$BACKUP_DIR"
+          if [ -d "VIDEO" ]; then
+            cp -r VIDEO/* "$BACKUP_DIR" 2>/dev/null || true
+          fi
+          if [ -d "AUDIO" ]; then
+            cp -r AUDIO/* "$BACKUP_DIR" 2>/dev/null || true
+          fi
+
+      - name: 📖 ایجاد READMEهای استاتیک (فارسی و انگلیسی)
         run: |
-          mkdir -p docs
+          BACKUP_DIR="${{ env.BACKUP_DIR }}"
+          for FOLDER in "$BACKUP_DIR"/*/; do
+            [ -d "$FOLDER" ] || continue
+            FOLDER_NAME=$(basename "$FOLDER")
+            cat > "$FOLDER/README.md" << EOF
+          # 🎬 $FOLDER_NAME
 
-          cat > docs/README_fa.md << 'FAEOF'
-          # 🎬 دانلودر جهانی ویدیو/صوت با GitHub Actions
+          This media file was downloaded using the **Universal Media Downloader** powered by yt‑dlp.
 
-          با این ابزار می‌توانید از **هر سایتی که توسط yt-dlp پشتیبانی می‌شود**، ویدیو یا صوت را با کیفیت دلخواه دانلود کنید.
+          ## 📥 How to Use
+          1. Download all file parts if split (`.zip`, `.z01`, ...).
+          2. Open the main \`.zip\` file with any standard archive manager (WinRAR, 7‑Zip, Ark).
+          3. Extract to your desired location.
+          4. (Optional) Verify the included SHA256 checksums.
 
-          ## 🚀 روش استفاده
-          1. به مخزن بروید و تب **Actions** را باز کنید.
-          2. از فهرست workflows، **Universal Video/Audio Downloader** را انتخاب کنید.
-          3. روی دکمهٔ **Run workflow** کلیک کنید.
-          4. فیلدها را مطابق نیاز پر کنید (راهنمای پایین).
-          5. دکمهٔ سبز **Run workflow** را بزنید.
-          6. پس از اتمام، به همان صفحه برگردید و **Artifacts** (خروجی zip) را دانلود کنید.
+          ## 🛠 Technical Details
+          - **Tool:** yt‑dlp + aria2 + ffmpeg
+          - **Date:** $(date '+%Y-%m-%d %H:%M:%S UTC')
+          - **Mode:** $MODE
 
-          ## ⚙️ توضیح ورودی‌ها
+          ---
+          *Powered by [yt‑dlp](https://github.com/yt-dlp/yt-dlp)*
+          EOF
 
-          | ورودی | توضیح |
-          |-------|--------|
-          | `download_video` | تیک بزنید = دانلود ویدیو، خالی بگذارید = دانلود صوت |
-          | `url` | لینک صفحهٔ حاوی ویدیو/صوت |
-          | `cookies` | محتوای کوکی‌ها با فرمت Netscape (اگر سایت نیاز به ورود داشته باشد) |
-          | `list_supported_sites` | اگر تیک بزنید، فایل لیست سایت‌های پشتیبانی‌شده در خروجی قرار می‌گیرد |
-          | `connect_timeout` | زمان انتظار برای برقراری اتصال (ثانیه) |
-          | `retries` | تعداد تلاش مجدد کلی (۱-۱۰) |
-          | `fragment_retries` | تلاش مجدد برای هر قطعه (۱-۱۰) |
-          | `extractor_retries` | تلاش مجدد در خطای دسترسی به فایل (۱-۱۰) |
-          | `output_template` | الگوی نام فایل خروجی (default = پوشهٔ VIDEO یا AUDIO با نام خودکار) |
-          | `embed_metadata` | درج متادیتا داخل فایل نهایی |
-          | `write_description` | ذخیرهٔ توضیحات در فایل .description (فقط ویدیو) |
-          | `write_all_thumbnails` | ذخیرهٔ تمام تصاویر بندانگشتی (فقط ویدیو) |
-          | `list_formats` | فقط نمایش فرمت‌های موجود (بدون دانلود) |
-          | `format_choice` | کیفیت/فرمت ویدیو (best, bestvideo+bestaudio, custom ...) |
-          | `custom_format` | اگر format_choice = custom باشد، فرمت دلخواه وارد کنید |
-          | `audio_quality_choice` | کیفیت صدا (best یا عدد kbps یا custom) |
-          | `custom_audio_quality` | اگر audio_quality_choice = custom باشد، مقدار دلخواه |
-          | `audio_format_choice` | فرمت فایل صوتی (mp3, m4a, opus ...) |
-          | `custom_audio_format` | اگر audio_format_choice = custom باشد، فرمت دلخواه |
-          | `embed_thumbnail` | الصاق کاور به فایل صوتی |
+            cat > "$FOLDER/README_FA.md" << EOF
+          # 🎬 $FOLDER_NAME
 
-          ## 🛡️ رفع خطای 403
-          ابزار به‌طور پیش‌فرض با هدرهای یک مرورگر واقعی (Chrome) درخواست می‌دهد. در صورت دریافت خطای 403:
-          - از فیلد `cookies` استفاده کنید (با نصب افزونهٔ **Get cookies.txt LOCALLY** در مرورگر، فایل کوکی را استخراج و محتوای آن را کپی کنید).
-          - می‌توانید User-Agent یا Referer را از طریق تغییر مستقیم اسکریپت سفارشی کنید.
+          این فایل رسانه‌ای توسط **دانلودر جهانی** مبتنی بر yt‑dlp دریافت شده است.
 
-          ## 📦 خروجی
-          - **Artifact `downloaded-media`**: پوشهٔ `VIDEO` (در حالت ویدیو) یا `AUDIO` (در حالت صوت) حاوی فایل(های) دانلودشده.
-          - **Artifact `documentation`**: همین فایل‌های راهنما.
-          - در صورت انتخاب `list_supported_sites`، فایل `supported_sites.txt` نیز ارائه می‌شود.
+          ## 📥 روش استفاده
+          1. تمام بخش‌های فایل را دانلود کنید (اگر چند بخش است).
+          2. فایل \`.zip\` اصلی را با نرم‌افزارهایی مانند WinRAR یا 7‑Zip باز کنید.
+          3. محتوا را استخراج نمایید.
+          4. (اختیاری) چکسام SHA256 ارائه‌شده را بررسی کنید.
 
-          > **نکته:** فقط یکی از دو حالت ویدیو یا صوت در هر اجرا فعال است.
-          FAEOF
+          ## 🛠 جزئیات فنی
+          - **ابزار:** yt‑dlp + aria2 + ffmpeg
+          - **تاریخ:** $(date '+%Y-%m-%d %H:%M:%S UTC')
+          - **حالت:** $MODE
 
-          cat > docs/README_en.md << 'ENEOF'
-          # 🎬 Universal Video/Audio Downloader with GitHub Actions
+          ---
+          *نیرو گرفته از [yt‑dlp](https://github.com/yt-dlp/yt-dlp)*
+          EOF
+          done
 
-          Download video or audio from **any site supported by yt-dlp** with full control over quality and metadata.
+      - name: 📦 بسته‌بندی و تقسیم فایل‌های حجیم
+        run: |
+          BACKUP_DIR="${{ env.BACKUP_DIR }}"
+          THRESHOLD_MB="${{ env.SPLIT_THRESHOLD_MB }}"
+          THRESHOLD_BYTES=$((THRESHOLD_MB * 1024 * 1024))
+          ZIP_PASSWORD="${{ env.ZIP_PASSWORD }}"
 
-          ## 🚀 How to Use
-          1. Open the **Actions** tab of this repository.
-          2. Select the **Universal Video/Audio Downloader** workflow.
-          3. Click the **Run workflow** button.
-          4. Fill in the required fields (see below).
-          5. Press the green **Run workflow** button.
-          6. When finished, return to the same run and download the **Artifacts** (zip file).
+          cd "$BACKUP_DIR"
+          for FOLDER in */; do
+            [ -d "$FOLDER" ] || continue
+            FOLDER_NAME=$(basename "$FOLDER")
+            mkdir -p "./packed/$FOLDER_NAME"
+            # محاسبه چکسام برای همه فایل‌ها
+            find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -exec sha256sum {} \; > "./packed/$FOLDER_NAME/SHA256SUMS"
+            # پیدا کردن فایل اصلی (بزرگترین فایل غیر zip)
+            MAIN_FILE=$(find "$FOLDER" -type f ! -name '*.zip' ! -name '*.z*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+            if [ -z "$MAIN_FILE" ]; then
+              echo "No main file in $FOLDER, skipping."
+              continue
+            fi
+            SIZE=$(stat -c%s "$MAIN_FILE")
+            BASENAME=$(basename "$MAIN_FILE")
+            if [ "$SIZE" -gt "$THRESHOLD_BYTES" ]; then
+              echo "Splitting $BASENAME ($((SIZE/1024/1024)) MB)"
+              ARCHIVE_BASE="./packed/$FOLDER_NAME/${FOLDER_NAME}"
+              if [ -n "$ZIP_PASSWORD" ]; then
+                zip -j -P "$ZIP_PASSWORD" -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$MAIN_FILE"
+              else
+                zip -j -s ${THRESHOLD_MB}m "${ARCHIVE_BASE}.zip" "$MAIN_FILE"
+              fi
+            else
+              # فایل کوچک، فقط زیپ ساده
+              if [ -n "$ZIP_PASSWORD" ]; then
+                zip -j -P "$ZIP_PASSWORD" "./packed/$FOLDER_NAME/${FOLDER_NAME}.zip" "$MAIN_FILE"
+              else
+                zip -j "./packed/$FOLDER_NAME/${FOLDER_NAME}.zip" "$MAIN_FILE"
+              fi
+            fi
+            # کپی READMEها و فایل‌های جانبی (مانند description, thumbnail) به پوشه packed
+            cp "$FOLDER"/*.md "$FOLDER"/*.description "$FOLDER"/*.jpg "$FOLDER"/*.png "./packed/$FOLDER_NAME/" 2>/dev/null || true
+          done
 
-          ## ⚙️ Inputs Reference
+          # جایگزینی محتوای backup_dir با packed
+          rm -rf "${BACKUP_DIR:?}"/*/
+          cp -r packed/* "$BACKUP_DIR"/
+          rm -rf packed
 
-          | Input | Description |
-          |-------|-------------|
-          | `download_video` | Check → Video mode / Uncheck → Audio mode |
-          | `url` | URL of the video/audio page |
-          | `cookies` | Netscape-formatted cookies content (for sites requiring login) |
-          | `list_supported_sites` | Output a list of all supported sites (txt) |
-          | `connect_timeout` | Connection timeout in seconds |
-          | `retries` | Number of retries (1‑10) |
-          | `fragment_retries` | Retries per fragment (1‑10) |
-          | `extractor_retries` | Retries on file access errors (1‑10) |
-          | `output_template` | Output filename template (default = auto folder under VIDEO or AUDIO) |
-          | `embed_metadata` | Embed metadata into the final file |
-          | `write_description` | Save description to .description file (video only) |
-          | `write_all_thumbnails` | Download all available thumbnails (video only) |
-          | `list_formats` | Only list available formats (no download) |
-          | `format_choice` | Video format/quality preset or custom |
-          | `custom_format` | Custom format string if `format_choice` is custom |
-          | `audio_quality_choice` | Audio quality: best, bitrate (kbps), or custom |
-          | `custom_audio_quality` | Custom audio quality value |
-          | `audio_format_choice` | Audio container format (mp3, m4a, opus, etc.) |
-          | `custom_audio_format` | Custom audio format if `audio_format_choice` is custom |
-          | `embed_thumbnail` | Embed cover art into audio file |
+      - name: 📤 Push تدریجی به ریپازیتوری
+        env:
+          BACKUP_DIR: ${{ env.BACKUP_DIR }}
+          ROOT_FOLDER: ${{ env.ROOT_FOLDER }}
+          BRANCH: ${{ env.BRANCH }}
+          REPO_OWNER: ${{ env.REPO_OWNER }}
+          REPO_NAME: ${{ env.REPO_NAME }}
+        run: |
+          BACKUP_DIR="${BACKUP_DIR}"
+          ROOT_FOLDER="${ROOT_FOLDER}"
+          BRANCH="${BRANCH}"
 
-          ## 🛡️ Avoiding 403 errors
-          By default, the tool sends headers mimicking a real Chrome browser. If you still get a 403:
-          - Use the `cookies` input (extract cookies using the **Get cookies.txt LOCALLY** browser add‑on and paste its content).
-          - You can manually modify User-Agent or Referer inside the script if needed.
+          git fetch origin "$BRANCH"
+          git reset --hard origin/"$BRANCH"
 
-          ## 📦 Output
-          - **Artifact `downloaded-media`**: folder `VIDEO` (video) or `AUDIO` (audio) with your files.
-          - **Artifact `documentation`**: these guides.
-          - If `list_supported_sites` was checked, `supported_sites.txt` is also provided.
+          # کپی فایل‌ها به پوشه اصلی (VIDEO یا AUDIO)
+          mkdir -p "$ROOT_FOLDER"
+          cp -r "$BACKUP_DIR"/* "$ROOT_FOLDER/" 2>/dev/null || true
 
-          > **Note:** Only one mode (video or audio) is performed per run.
-          ENEOF
+          # ساخت لیست فایل‌ها برای commit تدریجی
+          ALL_FILES=()
+          while IFS= read -r -d '' f; do ALL_FILES+=("$f"); done < <(find "$ROOT_FOLDER" -type f -print0 | sort -z)
 
-      - name: 📤 آپلود رسانه دانلودشده
-        uses: actions/upload-artifact@v4
-        if: env.LIST_FORMATS != 'true'
-        with:
-          name: downloaded-media
-          path: ${{ env.FOLDER }}
+          TOTAL_FILES=${#ALL_FILES[@]}
+          echo "Total files to push: $TOTAL_FILES"
 
-      - name: 📤 آپلود فایل‌های راهنما
-        uses: actions/upload-artifact@v4
-        with:
-          name: documentation
-          path: docs
+          if [ $TOTAL_FILES -eq 0 ]; then
+            echo "Nothing to push."
+            exit 0
+          fi
 
-      - name: 📤 آپلود لیست سایت‌ها (در صورت درخواست)
-        if: env.LIST_SUPPORTED_SITES == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: supported-sites
-          path: supported_sites.txt
+          push_batch() {
+            local batch=("$@")
+            for f in "${batch[@]}"; do git add "$f" 2>/dev/null || true; done
+            if ! git diff --cached --quiet; then
+              git commit -m "[Bot] Add media files [skip ci]" --quiet
+              local retry=0
+              while [ $retry -lt 5 ]; do
+                if timeout 180 git push origin HEAD:"$BRANCH"; then
+                  echo "Batch pushed successfully."
+                  return 0
+                else
+                  echo "Push failed, attempt $((retry+1))/5..."
+                  sleep $(( RANDOM % 10 + 5 ))
+                  git fetch origin "$BRANCH" --quiet
+                  if ! git rebase origin/"$BRANCH" --quiet; then
+                    echo "Rebase conflict – aborting batch."
+                    git rebase --abort
+                    return 1
+                  fi
+                fi
+                retry=$((retry+1))
+              done
+              return 1
+            fi
+          }
+
+          batch=()
+          for file in "${ALL_FILES[@]}"; do
+            batch+=("$file")
+            if [ ${#batch[@]} -ge 3 ]; then
+              push_batch "${batch[@]}" || { echo "❌ Push batch failed!"; exit 1; }
+              batch=()
+            fi
+          done
+          if [ ${#batch[@]} -gt 0 ]; then
+            push_batch "${batch[@]}" || { echo "❌ Push final batch failed!"; exit 1; }
+          fi
+
+          # آپدیت README اصلی ریپو
+          git fetch origin "$BRANCH"
+          git rebase origin/"$BRANCH" --quiet 2>/dev/null || git rebase --abort
+          mkdir -p "$ROOT_FOLDER"
+          cp -r "$BACKUP_DIR"/* "$ROOT_FOLDER/" 2>/dev/null || true
+
+          # ساخت فهرست در README اصلی (فارسی)
+          FOLDERS=$(find "$ROOT_FOLDER" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+          {
+            echo ""
+            echo "## 📁 فایل‌های دانلود شده اخیر"
+            echo ""
+            for f in $FOLDERS; do
+              echo "- [$f](./$ROOT_FOLDER/$f/)"
+            done
+            echo ""
+            echo "---"
+          } >> README.md
+
+          git add README.md "$ROOT_FOLDER"
+          if ! git diff --cached --quiet; then
+            git commit -m "[Bot] Update README with latest downloads [skip ci]"
+            timeout 180 git push origin HEAD:"$BRANCH" || echo "⚠️ README push timed out but files are safe."
+          fi
+
+          echo "✅ All files pushed to $ROOT_FOLDER in the repository."

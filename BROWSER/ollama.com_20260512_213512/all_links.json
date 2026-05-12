@@ -1,0 +1,94 @@
+{
+  "summary": {
+    "total": 43,
+    "internal_pages": 0,
+    "internal_assets": 33,
+    "external_total": 9,
+    "apis": 0,
+    "feeds": 0,
+    "special_links": 1
+  },
+  "internal": {
+    "pages": [],
+    "css": [
+      "https://ollama.com/public/tailwind.css?v=1ba68037c39d8f0eae5c17fcdc08c963",
+      "https://ollama.com/public/vendor/prism/prism.css?v=1ba68037c39d8f0eae5c17fcdc08c963"
+    ],
+    "js": [
+      "https://ollama.com/public/vendor/htmx/bundle.js",
+      "https://ollama.com/public/vendor/markdown-toolbar-element/markdown-toolbar-element.js"
+    ],
+    "images": [
+      "https://ollama.com/public/icon-16x16.png",
+      "https://ollama.com/public/icon-32x32.png",
+      "https://ollama.com/public/icon-48x48.png",
+      "https://ollama.com/public/icon-64x64.png",
+      "https://ollama.com/public/apple-touch-icon.png",
+      "https://ollama.com/public/android-chrome-icon-192x192.png",
+      "https://ollama.com/public/android-chrome-icon-512x512.png",
+      "https://ollama.com/public/ollama.png",
+      "https://ollama.com/public/claude.png",
+      "https://ollama.com/public/openclaw.png",
+      "https://ollama.com/public/hermes.png",
+      "https://ollama.com/public/openai.png",
+      "https://ollama.com/public/opencode.png",
+      "https://ollama.com/public/og.png"
+    ],
+    "fonts": [],
+    "media": [],
+    "documents": [],
+    "data": [],
+    "feeds": [],
+    "archives": [],
+    "other": [
+      "https://ollama.com/",
+      "https://ollama.com/search",
+      "https://ollama.com/docs",
+      "https://ollama.com/pricing",
+      "https://ollama.com/signin",
+      "https://ollama.com/download",
+      "https://ollama.com/library/phi4-mini",
+      "https://ollama.com/library/phi4-mini/tags",
+      "https://ollama.com/library/phi4-mini:latest",
+      "https://ollama.com/library/phi4-mini:3.8b",
+      "https://ollama.com/blog",
+      "https://docs.ollama.com/",
+      "https://ollama.com/privacy",
+      "https://ollama.com/terms",
+      "https://ollama.com/assets/library/phi3.5/dbf19a17-e3fd-46b6-a059-e6b4f1fae59f"
+    ]
+  },
+  "external": {
+    "cdn": [],
+    "fonts": [],
+    "analytics": [],
+    "social": [
+      "https://techcommunity.microsoft.com/blog/educatordeveloperblog/welcome-to-the-new-phi-4-models---microsoft-phi-4-mini--phi-4-multimodal/4386037",
+      "https://twitter.com/ollama"
+    ],
+    "ads": [],
+    "pages": [
+      "https://github.com/ollama/ollama-python",
+      "https://github.com/ollama/ollama-js",
+      "https://github.com/ollama/ollama/releases/tag/v0.5.13",
+      "https://huggingface.co/microsoft/Phi-4-mini-instruct",
+      "https://github.com/ollama/ollama",
+      "https://discord.com/invite/ollama",
+      "https://lu.ma/ollama"
+    ],
+    "other": []
+  },
+  "apis": [],
+  "special": {
+    "mailto": [
+      "mailto:hello@ollama.com"
+    ],
+    "tel": [],
+    "data_urls": [],
+    "blob": [],
+    "javascript": [],
+    "anchor": []
+  },
+  "feeds": [],
+  "uncategorized": []
+}

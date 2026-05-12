@@ -1,14 +1,21 @@
+# ============================================================
+#  🧩 Browser Extractor Pro — v3.0
+#  نویسنده: MR.MMD2019
+#  آخرین بروزرسانی: 2025
+# ============================================================
+
 name: 🧩 Browser Extractor Pro
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       url:
-        description: 'URL of the page to extract'
+        description: '🌐 آدرس صفحه برای استخراج (URL کامل با https://)'
         required: true
+        type: string
 
       output_type:
-        description: 'نوع خروجی'
+        description: '📁 نوع خروجی نهایی'
         required: true
         type: choice
         default: 'zip_and_folder'
@@ -18,42 +25,42 @@ on:
           - folder_only
 
       enable_split:
-        description: '✅ فعال‌سازی تقسیم فایل zip به تکه‌های کوچک'
+        description: '✂️ فعال‌سازی تقسیم فایل ZIP به تکه‌های کوچک‌تر'
         type: boolean
         default: false
 
       split_parts:
-        description: '🔢 تعداد تکه‌ها (۱ = بدون تقسیم)'
+        description: '🔢 تعداد تکه‌ها (فقط اگر enable_split فعال باشد)'
         type: number
         default: 1
 
       max_part_size_mb:
-        description: '📦 حداکثر حجم هر تکه (MB) - خالی = تقسیم بر اساس تعداد'
+        description: '📦 حداکثر حجم هر تکه به MB (خالی = تقسیم بر اساس تعداد)'
         type: string
         default: ''
 
       compression_level:
-        description: '🗜 سطح فشرده‌سازی (۱ تا ۹) - پیش‌فرض ۶'
+        description: '🗜️ سطح فشرده‌سازی ZIP (۱=سریع تا ۹=حداکثر فشرده)'
         type: number
         default: 6
 
       zip_password:
-        description: '🔐 رمز فایل zip (اختیاری)'
+        description: '🔐 رمز عبور فایل ZIP (اختیاری — خالی = بدون رمز)'
         type: string
         default: ''
 
-      screenshot_fallback_retries:
-        description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۱۰)'
+      screenshot_retries:
+        description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۵)'
         type: number
         default: 3
 
-      pdf_fallback_retries:
-        description: '📄 تعداد تلاش مجدد برای PDF (۱-۱۰)'
+      pdf_retries:
+        description: '📄 تعداد تلاش مجدد برای PDF (۱-۵)'
         type: number
         default: 3
 
       pdf_text_align:
-        description: '📐 تراز متن در PDF'
+        description: '📐 جهت متن در PDF'
         type: choice
         default: 'rtl'
         options:
@@ -61,295 +68,781 @@ on:
           - ltr
           - center
 
+      wait_extra_ms:
+        description: '⏱️ زمان انتظار اضافی پس از لود صفحه به میلی‌ثانیه (پیش‌فرض ۵۰۰۰)'
+        type: number
+        default: 5000
+
+# ─────────────────────────────────────────────
 jobs:
   extract:
+    name: 🕷️ Extract & Archive
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: write
+
     steps:
-      - name: Checkout
+      # ── ۱. Checkout ────────────────────────────────────────
+      - name: "📥 Checkout repository"
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup system dependencies
+      # ── ۲. Validate inputs ─────────────────────────────────
+      - name: "✅ Validate inputs"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl zip wget aria2 bc
+          set -euo pipefail
 
-      - name: Setup Node.js and Playwright
-        run: |
-          npm init -y
-          npm install playwright
-          npx playwright install --with-deps chromium
-
-      - name: Setup monolith (with aria2c)
-        run: |
-          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Y2Z/monolith/releases/latest | \
-            grep "browser_download_url.*x86_64-unknown-linux-gnu" | \
-            cut -d '"' -f 4)
-          if [ -n "$DOWNLOAD_URL" ]; then
-            echo "Downloading with aria2c: $DOWNLOAD_URL"
-            aria2c -x 4 -s 4 "$DOWNLOAD_URL" -o monolith.tar.gz
-            tar xzf monolith.tar.gz
-            sudo mv monolith /usr/local/bin/
-          else
-            sudo apt-get install -y cargo
-            cargo install monolith
-          fi
-          monolith --version
-
-      - name: Prepare output directory
-        run: |
           URL="${{ github.event.inputs.url }}"
-          DOMAIN=$(echo "$URL" | awk -F/ '{print $3}' | sed 's/^www\.//')
-          FOLDER_NAME="${DOMAIN}_$(date +%Y%m%d_%H%M%S)"
-          OUT_DIR="BROWSER/${FOLDER_NAME}"
-          mkdir -p "$OUT_DIR/assets"
-          echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
-          echo "FOLDER_NAME=$FOLDER_NAME" >> $GITHUB_ENV
-          echo "DOMAIN=$DOMAIN" >> $GITHUB_ENV
-          echo "URL=$URL" >> $GITHUB_ENV
-          CLEAN_URL=$(echo "$URL" | sed 's/\?.*//')
-          echo "CLEAN_URL=$CLEAN_URL" >> $GITHUB_ENV
+          if [[ ! "$URL" =~ ^https?:// ]]; then
+            echo "❌ ERROR: URL must start with http:// or https://"
+            exit 1
+          fi
 
-      - name: Extract page with Playwright
+          CL="${{ github.event.inputs.compression_level }}"
+          if ! [[ "$CL" =~ ^[1-9]$ ]]; then
+            echo "⚠️ WARNING: compression_level '$CL' is invalid, resetting to 6"
+            echo "COMPRESSION_LEVEL=6" >> $GITHUB_ENV
+          else
+            echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV
+          fi
+
+          SR="${{ github.event.inputs.screenshot_retries }}"
+          if ! [[ "$SR" =~ ^[1-5]$ ]]; then
+            echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV
+          else
+            echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV
+          fi
+
+          PR="${{ github.event.inputs.pdf_retries }}"
+          if ! [[ "$PR" =~ ^[1-5]$ ]]; then
+            echo "PDF_RETRIES=3" >> $GITHUB_ENV
+          else
+            echo "PDF_RETRIES=$PR" >> $GITHUB_ENV
+          fi
+
+          WAIT="${{ github.event.inputs.wait_extra_ms }}"
+          if ! [[ "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then
+            echo "WAIT_MS=5000" >> $GITHUB_ENV
+          else
+            echo "WAIT_MS=$WAIT" >> $GITHUB_ENV
+          fi
+
+          echo "✅ All inputs validated."
+
+      # ── ۳. System dependencies ─────────────────────────────
+      - name: "🔧 Install system dependencies"
         run: |
-          cat > extract.js << 'SCRIPT'
-          const { chromium } = require('playwright');
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            curl zip wget aria2 bc jq p7zip-full python3 ca-certificates
+          echo "✅ System dependencies installed."
+
+      # ── ۴. Node.js + Playwright ────────────────────────────
+      - name: "🎭 Setup Node.js and Playwright"
+        run: |
+          set -euo pipefail
+          npm init -y --quiet
+          npm install playwright@latest --save-exact --quiet
+
+          # نصب Chromium با fallback به Firefox
+          if npx playwright install --with-deps chromium 2>/dev/null; then
+            echo "BROWSER_TYPE=chromium" >> $GITHUB_ENV
+            echo "✅ Chromium installed."
+          else
+            echo "⚠️ Chromium failed, trying Firefox..."
+            npx playwright install --with-deps firefox
+            echo "BROWSER_TYPE=firefox" >> $GITHUB_ENV
+            echo "✅ Firefox installed as fallback."
+          fi
+
+      # ── ۵. Monolith ────────────────────────────────────────
+      - name: "📦 Setup Monolith"
+        run: |
+          set -uo pipefail
+
+          install_monolith_binary() {
+            echo "⬇️ Attempting binary download..."
+            DOWNLOAD_URL=$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "User-Agent: GitHub-Actions-Bot/3.0" \
+              "https://api.github.com/repos/Y2Z/monolith/releases/latest" \
+              | jq -r '.assets[] | select(.name | test("x86_64-unknown-linux")) | .browser_download_url' \
+              | head -1)
+
+            if [ -n "$DOWNLOAD_URL" ]; then
+              aria2c -x 4 -s 4 --retry-wait=3 --max-tries=3 \
+                -H "User-Agent: GitHub-Actions-Bot/3.0" \
+                "$DOWNLOAD_URL" -o monolith_dl 2>/dev/null
+
+              # تشخیص نوع فایل
+              if file monolith_dl | grep -q "gzip\|tar"; then
+                tar xzf monolith_dl
+              elif file monolith_dl | grep -q "ELF"; then
+                mv monolith_dl monolith
+              else
+                tar xzf monolith_dl 2>/dev/null || mv monolith_dl monolith
+              fi
+
+              chmod +x monolith
+              sudo mv monolith /usr/local/bin/
+              return 0
+            fi
+            return 1
+          }
+
+          install_monolith_cargo() {
+            echo "🔨 Building from source with Cargo..."
+            if command -v cargo &>/dev/null || (sudo apt-get install -y cargo 2>/dev/null); then
+              cargo install monolith --quiet && return 0
+            fi
+            return 1
+          }
+
+          # سه fallback برای نصب
+          if monolith --version &>/dev/null; then
+            echo "✅ Monolith already available."
+          elif install_monolith_binary; then
+            echo "✅ Monolith installed via binary."
+          elif install_monolith_cargo; then
+            echo "✅ Monolith installed via Cargo."
+          else
+            echo "⚠️ WARNING: Monolith unavailable. Will use wget fallback for monolithic HTML."
+            echo "MONOLITH_AVAILABLE=false" >> $GITHUB_ENV
+          fi
+
+          if monolith --version &>/dev/null; then
+            echo "MONOLITH_AVAILABLE=true" >> $GITHUB_ENV
+            monolith --version
+          fi
+
+      # ── ۶. Prepare output directory ────────────────────────
+      - name: "📁 Prepare output directory"
+        run: |
+          set -euo pipefail
+
+          URL="${{ github.event.inputs.url }}"
+
+          # استخراج دامنه با پاک‌سازی www
+          DOMAIN=$(echo "$URL" | awk -F'/' '{print $3}' | sed 's/^www\.//' | sed 's/:.*//')
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          FOLDER_NAME="${DOMAIN}_${TIMESTAMP}"
+          OUT_DIR="BROWSER/${FOLDER_NAME}"
+
+          mkdir -p "$OUT_DIR/assets"
+
+          # ذخیره URL پاک (بدون query string) برای monolith
+          CLEAN_URL=$(echo "$URL" | sed 's/\?.*//' | sed 's/#.*//')
+
+          echo "OUT_DIR=$OUT_DIR"             >> $GITHUB_ENV
+          echo "FOLDER_NAME=$FOLDER_NAME"     >> $GITHUB_ENV
+          echo "DOMAIN=$DOMAIN"               >> $GITHUB_ENV
+          echo "URL=$URL"                     >> $GITHUB_ENV
+          echo "CLEAN_URL=$CLEAN_URL"         >> $GITHUB_ENV
+          echo "TIMESTAMP=$TIMESTAMP"         >> $GITHUB_ENV
+
+          echo "✅ Output directory: $OUT_DIR"
+
+      # ── ۷. Extract page with Playwright ───────────────────
+      - name: "🎭 Extract page with Playwright"
+        run: |
+          set -uo pipefail
+
+          cat > extract.js << 'PLAYWRIGHT_SCRIPT'
+          'use strict';
+          const { chromium, firefox } = require('playwright');
           const fs = require('fs');
           const path = require('path');
-          const url = process.argv[2];
-          const outDir = process.argv[3];
-          const screenshotRetries = parseInt(process.argv[4] || '3');
-          const pdfRetries = parseInt(process.argv[5] || '3');
-          const pdfAlign = process.argv[6] || 'rtl';
-          const MAIN_DOMAIN = new URL(url).hostname;
-          function sanitizeFilename(urlPath) {
-            return decodeURIComponent(urlPath).replace(/[<>:"|?*]/g, '_').replace(/\/$/, '/index.html');
+
+          const url          = process.argv[2];
+          const outDir       = process.argv[3];
+          const browserType  = process.argv[4] || 'chromium';
+          const shotRetries  = Math.min(Math.max(parseInt(process.argv[5] || '3'), 1), 5);
+          const pdfRetries   = Math.min(Math.max(parseInt(process.argv[6] || '3'), 1), 5);
+          const pdfAlign     = process.argv[7] || 'rtl';
+          const waitMs       = Math.min(parseInt(process.argv[8] || '5000'), 30000);
+
+          // ─── Headers & User-Agent ──────────────────────────────────
+          const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+            'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+            'Chrome/124.0.0.0 Safari/537.36';
+
+          const EXTRA_HEADERS = {
+            'Accept':                    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language':           'en-US,en;q=0.9,fa;q=0.8',
+            'Accept-Encoding':           'gzip, deflate, br',
+            'Cache-Control':             'no-cache',
+            'Pragma':                    'no-cache',
+            'Sec-Ch-Ua':                 '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            'Sec-Ch-Ua-Mobile':          '?0',
+            'Sec-Ch-Ua-Platform':        '"Windows"',
+            'Sec-Fetch-Dest':            'document',
+            'Sec-Fetch-Mode':            'navigate',
+            'Sec-Fetch-Site':            'none',
+            'Sec-Fetch-User':            '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'DNT':                       '1',
+          };
+
+          const MAIN_DOMAIN = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
+
+          // ─── Utility: sanitize file path ──────────────────────────
+          function sanitizePath(urlPath) {
+            let p = '';
+            try { p = decodeURIComponent(urlPath); } catch { p = urlPath; }
+            p = p.replace(/[<>:"|?*\\]/g, '_').replace(/\/{2,}/g, '/');
+            if (p.endsWith('/') || p === '') p += 'index.html';
+            return p;
           }
-          (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
-            page.on('response', async (response) => {
-              if (response.status() !== 200) return;
-              const respUrl = new URL(response.url());
-              if (!(respUrl.hostname === MAIN_DOMAIN || respUrl.hostname.endsWith('.' + MAIN_DOMAIN))) return;
-              const headers = response.headers();
-              const contentType = headers['content-type'] || '';
-              if (
-                contentType.includes('text/css') ||
-                contentType.includes('application/javascript') ||
-                contentType.includes('image/') ||
-                contentType.includes('font') ||
-                contentType.includes('application/json')
-              ) {
-                try {
-                  const buffer = await response.body();
-                  const cleanPath = sanitizeFilename(respUrl.pathname);
-                  const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
-                  fs.mkdirSync(path.dirname(assetPath), { recursive: true });
-                  fs.writeFileSync(assetPath, buffer);
-                } catch (e) {}
+
+          // ─── Utility: sleep ───────────────────────────────────────
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+          // ─── Link categorization ──────────────────────────────────
+          function categorizeLinks(links, mainDomain) {
+            const EXT_MAP = {
+              css: 'css', js: 'js',
+              png: 'images', jpg: 'images', jpeg: 'images', gif: 'images',
+              svg: 'images', webp: 'images', ico: 'images', avif: 'images', bmp: 'images',
+              woff: 'fonts', woff2: 'fonts', ttf: 'fonts', otf: 'fonts', eot: 'fonts',
+              mp4: 'media', webm: 'media', ogg: 'media', mp3: 'media',
+              wav: 'media', avi: 'media', mov: 'media', flv: 'media', m4v: 'media',
+              pdf: 'documents', doc: 'documents', docx: 'documents',
+              xls: 'documents', xlsx: 'documents', ppt: 'documents', pptx: 'documents',
+              json: 'data', xml: 'data', csv: 'data', yaml: 'data', yml: 'data',
+              rss: 'feeds', atom: 'feeds',
+              zip: 'archives', gz: 'archives', tar: 'archives', rar: 'archives', '7z': 'archives',
+            };
+            const KNOWN_FONTS     = ['fonts.googleapis.com','fonts.gstatic.com','use.typekit.net','cloud.typography.com','use.fontawesome.com','kit.fontawesome.com'];
+            const KNOWN_ANALYTICS = ['google-analytics.com','googletagmanager.com','hotjar.com','segment.com','mixpanel.com','amplitude.com','clarity.ms','mouseflow.com','fullstory.com','heap.io'];
+            const KNOWN_SOCIAL    = ['facebook.com','twitter.com','instagram.com','linkedin.com','youtube.com','tiktok.com','t.co','x.com','pinterest.com','snapchat.com','reddit.com'];
+            const KNOWN_CDN       = ['cdn.','static.','assets.','media.','img.','images.','js.','css.','files.'];
+            const KNOWN_AD        = ['doubleclick.net','googlesyndication.com','adservice.google','adnxs.com','moatads.com','criteo.com','taboola.com','outbrain.com'];
+
+            const out = {
+              summary: { total: links.length },
+              internal: { pages: [], css: [], js: [], images: [], fonts: [], media: [], documents: [], data: [], feeds: [], archives: [], other: [] },
+              external: { cdn: [], fonts: [], analytics: [], social: [], ads: [], pages: [], other: [] },
+              apis: [],
+              special: { mailto: [], tel: [], data_urls: [], blob: [], javascript: [], anchor: [] },
+              feeds: [],
+              uncategorized: [],
+            };
+
+            for (const link of links) {
+              if (!link || typeof link !== 'string' || link.trim() === '') continue;
+              const l = link.trim();
+
+              // پروتکل‌های خاص
+              if (l.startsWith('mailto:'))     { out.special.mailto.push(l);     continue; }
+              if (l.startsWith('tel:'))        { out.special.tel.push(l);        continue; }
+              if (l.startsWith('data:'))       { out.special.data_urls.push(l);  continue; }
+              if (l.startsWith('blob:'))       { out.special.blob.push(l);       continue; }
+              if (l.startsWith('javascript:')) { out.special.javascript.push(l); continue; }
+              if (l.startsWith('#'))           { out.special.anchor.push(l);     continue; }
+
+              let parsed;
+              try { parsed = new URL(l); } catch { out.uncategorized.push(l); continue; }
+
+              const hostname = parsed.hostname;
+              const pathname = parsed.pathname;
+              const extRaw   = pathname.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
+              const ext      = EXT_MAP[extRaw];
+              const isInt    = mainDomain && (hostname === mainDomain || hostname.endsWith('.' + mainDomain));
+
+              // feeds
+              if (ext === 'feeds' || pathname.includes('/feed') || pathname.includes('/rss')) {
+                out.feeds.push(l); continue;
               }
-            });
-            let useFastFallback = false;
-            try {
-              await page.goto(url,{ waitUntil: 'networkidle', timeout: 100000})
-            }catch (e) {
-             console.log('networkidle timed out --> switching to fast fallback');
-             useFastFallback = true;
+
+              // API endpoints
+              if (/\/(api|graphql|rest|v\d+|gql)\//i.test(pathname) || parsed.searchParams.has('api_key')) {
+                out.apis.push(l); continue;
+              }
+
+              if (isInt) {
+                const bucket = out.internal[ext] || out.internal.other;
+                if (Array.isArray(bucket)) bucket.push(l);
+                else out.internal.other.push(l);
+              } else {
+                if (KNOWN_FONTS.some(f => hostname.includes(f)))     { out.external.fonts.push(l); }
+                else if (KNOWN_ANALYTICS.some(a => hostname.includes(a))) { out.external.analytics.push(l); }
+                else if (KNOWN_AD.some(a => hostname.includes(a)))   { out.external.ads.push(l); }
+                else if (KNOWN_SOCIAL.some(s => hostname.includes(s))) { out.external.social.push(l); }
+                else if (KNOWN_CDN.some(c => hostname.startsWith(c)) || (ext && ext !== 'pages')) { out.external.cdn.push(l); }
+                else { out.external.pages.push(l); }
+              }
             }
 
-            if (useFastFallback) {
-              await page.goto(url, { waitUntil: 'commit', timeout: 60000 });
+            // خلاصه
+            out.summary.internal_pages  = out.internal.pages.length;
+            out.summary.internal_assets = Object.values(out.internal).flat().length - out.internal.pages.length;
+            out.summary.external_total  = Object.values(out.external).flat().length;
+            out.summary.apis            = out.apis.length;
+            out.summary.feeds           = out.feeds.length;
+            out.summary.special_links   = Object.values(out.special).flat().length;
+            return out;
+          }
+
+          // ─── PDF: خواندن صحیح stream به صورت chunk‌ها ────────────
+          async function readPdfStream(session, stream) {
+            const chunks = [];
+            let eof = false;
+            while (!eof) {
+              const chunk = await session.send('IO.read', { handle: stream, size: 1048576 });
+              if (chunk.data) {
+                chunks.push(Buffer.from(chunk.data, chunk.base64Encoded ? 'base64' : 'utf8'));
+              }
+              eof = chunk.eof;
+            }
+            await session.send('IO.close', { handle: stream }).catch(() => {});
+            return Buffer.concat(chunks);
+          }
+
+          // ─── Page navigation با چند fallback ─────────────────────
+          async function navigateWithFallback(page, targetUrl) {
+            const strategies = [
+              { waitUntil: 'networkidle', timeout: 90000 },
+              { waitUntil: 'domcontentloaded', timeout: 60000 },
+              { waitUntil: 'load', timeout: 45000 },
+              { waitUntil: 'commit', timeout: 30000 },
+            ];
+
+            for (let i = 0; i < strategies.length; i++) {
               try {
-                await page.waitForSelector('img',{timeout: 600000})
-              }catch(e) {
+                console.log(`[Nav] Strategy ${i + 1}/${strategies.length}: waitUntil=${strategies[i].waitUntil}`);
+                await page.goto(targetUrl, strategies[i]);
+                console.log(`[Nav] ✅ Page loaded with strategy ${i + 1}`);
+                return true;
+              } catch (e) {
+                console.log(`[Nav] ⚠️ Strategy ${i + 1} failed: ${e.message.split('\n')[0]}`);
+                if (i < strategies.length - 1) await sleep(2000);
               }
             }
+            console.error('[Nav] ❌ All navigation strategies failed.');
+            return false;
+          }
+
+          // ─── Asset interceptor ────────────────────────────────────
+          function setupAssetCapture(page, outDir, mainDomain) {
+            const captured = new Set();
+            page.on('response', async (response) => {
+              try {
+                if (response.status() < 200 || response.status() >= 400) return;
+                const respUrl = (() => { try { return new URL(response.url()); } catch { return null; } })();
+                if (!respUrl) return;
+
+                const isInternal = respUrl.hostname === mainDomain ||
+                                   respUrl.hostname.endsWith('.' + mainDomain);
+                if (!isInternal) return;
+
+                const ct = (response.headers()['content-type'] || '').toLowerCase();
+                const isAsset =
+                  ct.includes('text/css') ||
+                  ct.includes('javascript') ||
+                  ct.includes('image/') ||
+                  ct.includes('font') ||
+                  ct.includes('application/json') ||
+                  ct.includes('application/xml') ||
+                  ct.includes('audio/') ||
+                  ct.includes('video/');
+
+                if (!isAsset) return;
+                if (captured.has(response.url())) return;
+                captured.add(response.url());
+
+                const buffer = await response.body();
+                if (!buffer || buffer.length === 0) return;
+
+                const cleanPath = sanitizePath(respUrl.pathname);
+                const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
+                fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+                fs.writeFileSync(assetPath, buffer);
+              } catch { /* silent — asset capture failures are non-critical */ }
+            });
+          }
+
+          // ─── Auto-scroll برای لود lazy content ───────────────────
+          async function autoScroll(page) {
             await page.evaluate(async () => {
-              const delay = ms => new Promise(res => setTimeout(res,ms));
-              let lastHeight = 0;
-              let scrollHeight = document.body.scrollHeight;
-              let attempts = 0;
-              while (lastHeight !== scrollHeight && attempts < 30) {
-                window.scrollBy(0,500);
-                await delay(300);
-                lastHeight = scrollHeight;
-                scrollHeight = document.body.scrollHeight;
-                attempts++;
-              }
-              window.scrollTo(0,0);
-            });
-            await page.waitForTimeout(10000);
-            const allLinks = await page.evaluate(() => {
-              const links = [];
-              document.querySelectorAll('a[href]').forEach(a => links.push(a.href));
-              document.querySelectorAll('link[href]').forEach(l => links.push(l.href));
-              document.querySelectorAll('script[src]').forEach(s => links.push(s.src));
-              document.querySelectorAll('img[src]').forEach(i => links.push(i.src));
-              document.querySelectorAll('video[src], audio[src], source[src]').forEach(m => links.push(m.src));
-              document.querySelectorAll('iframe[src]').forEach(f => links.push(f.src));
-              return [...new Set(links)];
-            });
-            fs.writeFileSync(path.join(outDir, 'all_links.json'), JSON.stringify(allLinks, null, 2));
-            let screenshotDone = false;
-            for (let i = 0; i < screenshotRetries; i++) {
-              try {
-                await page.screenshot({ path: path.join(outDir, 'screenshot.png'), fullPage: true, timeout: 600000 });
-                screenshotDone = true;
-                console.log(`Screenshot taken on attempt ${i+1}`);
-                break;
-              } catch (err) {
-                console.log(`Screenshot attempt ${i+1} failed: ${err.message}`);
-                if (i === screenshotRetries - 1) {
-                  try {
-                    await page.screenshot({ path: path.join(outDir, 'screenshot.png'), fullPage: false, timeout: 60000 });
-                    screenshotDone = true;
-                  } catch (e2) {
-                    console.error('All screenshot attempts failed.');
+              await new Promise(resolve => {
+                let lastH = 0;
+                let tries = 0;
+                const MAX  = 50;
+                const iv = setInterval(() => {
+                  window.scrollBy(0, 600);
+                  const h = document.body.scrollHeight;
+                  if (h === lastH || ++tries >= MAX) {
+                    clearInterval(iv);
+                    window.scrollTo(0, 0);
+                    resolve();
                   }
-                }
+                  lastH = h;
+                }, 250);
+              });
+            }).catch(() => {});
+          }
+
+          // ─── Link collection ─────────────────────────────────────
+          async function collectLinks(page) {
+            return page.evaluate(() => {
+              const s = new Set();
+              const add = v => { if (v && v.trim() && !v.trim().startsWith('about:')) s.add(v.trim()); };
+              document.querySelectorAll('a[href]').forEach(el => add(el.href));
+              document.querySelectorAll('link[href]').forEach(el => add(el.href));
+              document.querySelectorAll('script[src]').forEach(el => add(el.src));
+              document.querySelectorAll('img[src], img[data-src], img[data-lazy-src]').forEach(el => {
+                add(el.src); add(el.dataset.src); add(el.dataset.lazySrc);
+              });
+              document.querySelectorAll('video[src], audio[src], source[src]').forEach(el => add(el.src));
+              document.querySelectorAll('iframe[src]').forEach(el => add(el.src));
+              document.querySelectorAll('[srcset]').forEach(el => {
+                el.srcset.split(',').forEach(p => add(p.trim().split(' ')[0]));
+              });
+              document.querySelectorAll('meta[property="og:image"], meta[name="twitter:image"]').forEach(el => add(el.content));
+              return [...s];
+            }).catch(() => []);
+          }
+
+          // ─── Screenshot با fallback ───────────────────────────────
+          async function takeScreenshot(page, outPath, retries) {
+            for (let i = 0; i < retries; i++) {
+              // fullPage
+              try {
+                await page.screenshot({ path: outPath, fullPage: true, timeout: 90000, type: 'png' });
+                console.log(`[Screenshot] ✅ Full-page screenshot on attempt ${i + 1}`);
+                return true;
+              } catch (e) {
+                console.log(`[Screenshot] ⚠️ Full-page attempt ${i + 1} failed: ${e.message.split('\n')[0]}`);
+              }
+              // viewport only
+              try {
+                await page.screenshot({ path: outPath, fullPage: false, timeout: 30000, type: 'png' });
+                console.log(`[Screenshot] ✅ Viewport screenshot on attempt ${i + 1} (fallback)`);
+                return true;
+              } catch (e2) {
+                console.log(`[Screenshot] ⚠️ Viewport attempt ${i + 1} failed: ${e2.message.split('\n')[0]}`);
+                if (i < retries - 1) await sleep(3000);
               }
             }
-            const html = await page.content();
-            fs.writeFileSync(path.join(outDir, 'index.html'), html);
-            if (pdfAlign === 'rtl') {
-              await page.evaluate(() => { document.body.style.direction = 'rtl'; });
-            } else if (pdfAlign === 'center') {
-              await page.evaluate(() => { document.body.style.textAlign = 'center'; });
-            }
-            for (let i = 0; i < pdfRetries; i++) {
+            console.error('[Screenshot] ❌ All screenshot attempts failed.');
+            return false;
+          }
+
+          // ─── PDF با fallback ──────────────────────────────────────
+          async function generatePdf(page, outPath, retries) {
+            for (let i = 0; i < retries; i++) {
+              // روش ۱: CDP stream (کامل‌ترین)
               try {
                 const session = await page.context().newCDPSession(page);
                 const result = await session.send('Page.printToPDF', {
-                  printBackground: true,
-                  preferCSSPageSize: true,
+                  printBackground: true, preferCSSPageSize: true,
                   displayHeaderFooter: false,
-                  marginTop: '0.4in',
-                  marginBottom: '0.4in',
-                  marginLeft: '0.4in',
-                  marginRight: '0.4in',
-                  landscape: false,
-                  transferMode: 'ReturnAsStream'
+                  marginTop: '0.4in', marginBottom: '0.4in',
+                  marginLeft: '0.4in', marginRight: '0.4in',
+                  landscape: false, transferMode: 'ReturnAsStream',
                 });
-                const stream = result.stream;
-                const pdfData = await session.send('IO.read', { handle: stream });
-                fs.writeFileSync(path.join(outDir, 'page.pdf'), Buffer.from(pdfData.data, 'base64'));
-                await session.send('IO.close', { handle: stream });
-                console.log(`PDF generated on attempt ${i+1}`);
-                break;
-              } catch (err) {
-                console.log(`PDF attempt ${i+1} failed: ${err.message}`);
-                if (i === pdfRetries - 1) {
-                  try {
-                    await page.pdf({ path: path.join(outDir, 'page.pdf'), format: 'A4', printBackground: true, timeout: 120000 });
-                  } catch (e2) {
-                    console.error('All PDF attempts failed.');
-                  }
-                }
+                const pdfBuf = await readPdfStream(session, result.stream);
+                fs.writeFileSync(outPath, pdfBuf);
+                console.log(`[PDF] ✅ CDP stream PDF on attempt ${i + 1} (${pdfBuf.length} bytes)`);
+                return true;
+              } catch (e) {
+                console.log(`[PDF] ⚠️ CDP attempt ${i + 1} failed: ${e.message.split('\n')[0]}`);
+              }
+              // روش ۲: Playwright built-in pdf()
+              try {
+                await page.pdf({ path: outPath, format: 'A4', printBackground: true, timeout: 120000 });
+                console.log(`[PDF] ✅ Playwright pdf() on attempt ${i + 1}`);
+                return true;
+              } catch (e2) {
+                console.log(`[PDF] ⚠️ page.pdf() attempt ${i + 1} failed: ${e2.message.split('\n')[0]}`);
+                if (i < retries - 1) await sleep(3000);
               }
             }
-            await browser.close();
-          })();
-          SCRIPT
-          node extract.js "${{ github.event.inputs.url }}" "$OUT_DIR" \
-            "${{ github.event.inputs.screenshot_fallback_retries }}" \
-            "${{ github.event.inputs.pdf_fallback_retries }}" \
-            "${{ github.event.inputs.pdf_text_align }}"
+            console.error('[PDF] ❌ All PDF attempts failed.');
+            return false;
+          }
 
-      - name: Create monolithic HTML
+          // ─── MAIN ─────────────────────────────────────────────────
+          (async () => {
+            let browser;
+            const exitCode = { value: 0 };
+
+            try {
+              const launchOpts = {
+                headless: true,
+                args: [
+                  '--no-sandbox',
+                  '--disable-setuid-sandbox',
+                  '--disable-dev-shm-usage',
+                  '--disable-blink-features=AutomationControlled',
+                  '--disable-infobars',
+                  '--window-size=1920,1080',
+                  '--lang=en-US,en',
+                  '--disable-extensions',
+                  '--disable-plugins',
+                  '--disable-background-networking',
+                  '--disable-sync',
+                  '--metrics-recording-only',
+                  '--no-first-run',
+                  '--safebrowsing-disable-auto-update',
+                ],
+              };
+
+              const launcher = browserType === 'firefox' ? firefox : chromium;
+              browser = await launcher.launch(launchOpts);
+
+              const context = await browser.newContext({
+                userAgent: USER_AGENT,
+                extraHTTPHeaders: EXTRA_HEADERS,
+                viewport: { width: 1920, height: 1080 },
+                locale: 'en-US',
+                timezoneId: 'America/New_York',
+                javaScriptEnabled: true,
+                ignoreHTTPSErrors: true,
+                bypassCSP: true,
+                permissions: [],
+              });
+
+              // مخفی کردن نشانه‌های automation
+              await context.addInitScript(() => {
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                window.chrome = { runtime: {} };
+              });
+
+              const page = await context.newPage();
+              setupAssetCapture(page, outDir, MAIN_DOMAIN);
+
+              // ─── Navigation ──────────────────────────────────
+              const navOk = await navigateWithFallback(page, url);
+              if (!navOk) {
+                console.error('❌ FATAL: Cannot load the page at all.');
+                exitCode.value = 1;
+              }
+
+              // ─── Scroll + wait ───────────────────────────────
+              await autoScroll(page);
+              await sleep(waitMs);
+
+              // ─── Link collection ─────────────────────────────
+              const rawLinks = await collectLinks(page);
+              const categorized = categorizeLinks(rawLinks, MAIN_DOMAIN);
+              fs.writeFileSync(
+                path.join(outDir, 'all_links.json'),
+                JSON.stringify(categorized, null, 2)
+              );
+              console.log(`[Links] ✅ ${categorized.summary.total} links collected and categorized.`);
+
+              // ─── HTML ────────────────────────────────────────
+              const html = await page.content().catch(() => '<!-- page content unavailable -->');
+              fs.writeFileSync(path.join(outDir, 'index.html'), html);
+              console.log('[HTML] ✅ index.html saved.');
+
+              // ─── PDF direction ───────────────────────────────
+              if (pdfAlign === 'rtl') {
+                await page.evaluate(() => {
+                  document.documentElement.dir = 'rtl';
+                  document.body.style.direction = 'rtl';
+                }).catch(() => {});
+              } else if (pdfAlign === 'ltr') {
+                await page.evaluate(() => {
+                  document.documentElement.dir = 'ltr';
+                  document.body.style.direction = 'ltr';
+                }).catch(() => {});
+              } else if (pdfAlign === 'center') {
+                await page.evaluate(() => {
+                  document.body.style.textAlign = 'center';
+                }).catch(() => {});
+              }
+
+              // ─── Screenshot ──────────────────────────────────
+              await takeScreenshot(page, path.join(outDir, 'screenshot.png'), shotRetries);
+
+              // ─── PDF ─────────────────────────────────────────
+              await generatePdf(page, path.join(outDir, 'page.pdf'), pdfRetries);
+
+            } catch (fatal) {
+              console.error('❌ FATAL error:', fatal.message);
+              exitCode.value = 1;
+            } finally {
+              if (browser) await browser.close().catch(() => {});
+            }
+
+            process.exit(exitCode.value);
+          })();
+          PLAYWRIGHT_SCRIPT
+
+          node extract.js \
+            "${{ github.event.inputs.url }}" \
+            "$OUT_DIR" \
+            "$BROWSER_TYPE" \
+            "$SCREENSHOT_RETRIES" \
+            "$PDF_RETRIES" \
+            "${{ github.event.inputs.pdf_text_align }}" \
+            "$WAIT_MS"
+
+      # ── ۸. Monolithic HTML ────────────────────────────────
+      - name: "🧱 Create monolithic HTML (Monolith)"
         run: |
-          if ! monolith "$CLEAN_URL" -o "$OUT_DIR/page_monolith.html"; then
-            echo "Monolith with clean URL failed, trying original URL..."
-            if ! monolith "$URL" -o "$OUT_DIR/page_monolith.html"; then
-              echo "Monolith completely failed, downloading raw HTML as fallback..."
-              curl -sL -o "$OUT_DIR/page_monolith.html" "$URL"
+          set -uo pipefail
+
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+          OUTPUT="$OUT_DIR/page_monolith.html"
+
+          run_monolith() {
+            local target_url="$1"
+            monolith "$target_url" \
+              --user-agent "$UA" \
+              --timeout 60 \
+              --no-video \
+              -o "$OUTPUT" 2>&1
+          }
+
+          if [ "${MONOLITH_AVAILABLE:-true}" = "true" ]; then
+            # fallback ۱: URL پاک
+            if run_monolith "$CLEAN_URL"; then
+              echo "✅ Monolith OK with clean URL."
+            # fallback ۲: URL اصلی
+            elif run_monolith "$URL"; then
+              echo "✅ Monolith OK with original URL."
+            # fallback ۳: curl با هدرهای کامل
+            else
+              echo "⚠️ Monolith failed. Falling back to curl..."
+              curl -fsSL \
+                -H "User-Agent: $UA" \
+                -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+                -H "Accept-Language: en-US,en;q=0.9" \
+                -H "Cache-Control: no-cache" \
+                -H "Pragma: no-cache" \
+                -H "Upgrade-Insecure-Requests: 1" \
+                --compressed --max-time 60 --retry 3 --retry-delay 5 \
+                -o "$OUTPUT" "$URL" \
+                || { echo "⚠️ curl fallback also failed. Creating placeholder."; echo "<html><body><p>Monolith unavailable for this page.</p></body></html>" > "$OUTPUT"; }
             fi
+          else
+            echo "⚠️ Monolith not installed. Using wget fallback..."
+            wget -q \
+              --user-agent "$UA" \
+              --header "Accept: text/html,*/*" \
+              --timeout=60 --tries=3 \
+              -O "$OUTPUT" "$URL" \
+              || { echo "⚠️ wget fallback failed. Creating placeholder."; echo "<html><body><p>Monolith unavailable.</p></body></html>" > "$OUTPUT"; }
           fi
 
-      - name: Package output and save to backup
+          ls -lh "$OUTPUT" 2>/dev/null || echo "⚠️ page_monolith.html not created."
+
+      # ── ۹. Package & ZIP ──────────────────────────────────
+      - name: "📦 Package output and create ZIP"
         run: |
-          OUT_DIR="${{ env.OUT_DIR }}"
+          set -euo pipefail
+
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
           ZIP_PASSWORD="${{ github.event.inputs.zip_password }}"
-          COMPRESSION_LEVEL=${{ github.event.inputs.compression_level }}
           ENABLE_SPLIT="${{ github.event.inputs.enable_split }}"
-          SPLIT_PARTS=${{ github.event.inputs.split_parts }}
+          SPLIT_PARTS="${{ github.event.inputs.split_parts }}"
           MAX_PART_SIZE_MB="${{ github.event.inputs.max_part_size_mb }}"
           OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
+          CL="${{ env.COMPRESSION_LEVEL }}"
 
-          BACKUP_DIR="/tmp/backup_$$"
-          rm -rf "$BACKUP_DIR"
+          BACKUP_DIR="/tmp/backup_$$_${FOLDER_NAME}"
           mkdir -p "$BACKUP_DIR"
           echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
 
-          cd "${OUT_DIR}/.."
+          cd BROWSER
 
           ZIP_BASE="${FOLDER_NAME}"
           ARCHIVE_PATH="${ZIP_BASE}.zip"
-          TOTAL_SIZE=$(du -sb "$FOLDER_NAME" | cut -f1)
 
+          TOTAL_SIZE=0
+          if [ -d "$FOLDER_NAME" ]; then
+            TOTAL_SIZE=$(du -sb "$FOLDER_NAME" 2>/dev/null | cut -f1 || echo "0")
+          fi
+
+          # ─── محاسبه split size ────────────────────────────
           USE_SPLIT=false
+          SPLIT_SIZE=100
+
           if [ "$ENABLE_SPLIT" = "true" ]; then
-            if [ -n "$MAX_PART_SIZE_MB" ] && [ "$MAX_PART_SIZE_MB" -gt 0 ] 2>/dev/null; then
+            if [ -n "$MAX_PART_SIZE_MB" ] && echo "$MAX_PART_SIZE_MB" | grep -qE '^[0-9]+$' && [ "$MAX_PART_SIZE_MB" -gt 0 ]; then
               SPLIT_SIZE="$MAX_PART_SIZE_MB"
               USE_SPLIT=true
-            elif [ "$SPLIT_PARTS" -gt 1 ]; then
+              echo "Split mode: fixed ${SPLIT_SIZE}MB per part"
+            elif echo "$SPLIT_PARTS" | grep -qE '^[0-9]+$' && [ "$SPLIT_PARTS" -gt 1 ] && [ "$TOTAL_SIZE" -gt 0 ]; then
               SPLIT_SIZE=$(echo "($TOTAL_SIZE + $SPLIT_PARTS - 1) / $SPLIT_PARTS / 1048576 + 1" | bc)
               USE_SPLIT=true
+              echo "Split mode: ${SPLIT_PARTS} parts → ~${SPLIT_SIZE}MB each"
             fi
           fi
 
-          [ "$COMPRESSION_LEVEL" -lt 1 ] || [ "$COMPRESSION_LEVEL" -gt 9 ] && COMPRESSION_LEVEL=6
+          # ─── ایجاد ZIP ────────────────────────────────────
+          if [ "$OUTPUT_TYPE" != "folder_only" ]; then
+            build_zip() {
+              local extra_args=()
+              [ -n "$ZIP_PASSWORD" ] && extra_args+=(-P "$ZIP_PASSWORD")
+              [ "$USE_SPLIT" = "true" ] && extra_args+=(-s "${SPLIT_SIZE}m")
 
-          if [ "$USE_SPLIT" = true ]; then
-            echo "Creating split ZIP with part size ${SPLIT_SIZE}MB"
-            if [ -n "$ZIP_PASSWORD" ]; then
-              zip -r -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" -s ${SPLIT_SIZE}m "${ARCHIVE_PATH}" "$FOLDER_NAME"
-            else
-              zip -r -${COMPRESSION_LEVEL} -s ${SPLIT_SIZE}m "${ARCHIVE_PATH}" "$FOLDER_NAME"
-            fi
-          else
-            if [ -n "$ZIP_PASSWORD" ]; then
-              zip -r -${COMPRESSION_LEVEL} -P "$ZIP_PASSWORD" "${ARCHIVE_PATH}" "$FOLDER_NAME"
-            else
-              zip -r -${COMPRESSION_LEVEL} "${ARCHIVE_PATH}" "$FOLDER_NAME"
-            fi
+              # تلاش ۱: zip استاندارد
+              if zip -r "-${CL}" "${extra_args[@]}" "$ARCHIVE_PATH" "$FOLDER_NAME"; then
+                echo "✅ ZIP created successfully."
+                return 0
+              fi
+              echo "⚠️ zip failed, trying p7zip..."
+
+              # تلاش ۲: p7zip
+              local p7_args=("-mx=${CL}")
+              [ -n "$ZIP_PASSWORD" ] && p7_args+=("-p${ZIP_PASSWORD}")
+              if 7z a "${p7_args[@]}" "$ARCHIVE_PATH" "$FOLDER_NAME"; then
+                echo "✅ ZIP created with 7z."
+                return 0
+              fi
+              echo "❌ All ZIP methods failed."
+              return 1
+            }
+
+            build_zip || echo "⚠️ WARNING: ZIP creation failed — folder still available."
           fi
 
-          if [ "$OUTPUT_TYPE" = "zip_only" ]; then
+          # ─── پاک کردن بر اساس output_type ───────────────
+          if [ "$OUTPUT_TYPE" = "zip_only" ] && [ -f "$ARCHIVE_PATH" ]; then
             rm -rf "$FOLDER_NAME"
+            echo "✅ Folder removed (zip_only mode)."
           elif [ "$OUTPUT_TYPE" = "folder_only" ]; then
-            rm -f "${ARCHIVE_PATH}" "${ARCHIVE_PATH}.z"* 2>/dev/null || true
+            rm -f "${ZIP_BASE}.zip" "${ZIP_BASE}.z"[0-9]* 2>/dev/null || true
+            echo "✅ ZIP files removed (folder_only mode)."
           fi
 
-          cp -r . "$BACKUP_DIR"
-          echo "Packaging done. Backup saved to $BACKUP_DIR"
+          # ─── ذخیره backup ────────────────────────────────
+          cp -r . "$BACKUP_DIR/"
+          echo "✅ Backup saved to $BACKUP_DIR"
 
-      - name: Generate links.txt and READMEs
+      # ── ۱۰. Generate READMEs & links.txt ─────────────────
+      - name: "📝 Generate README and links.txt"
         run: |
+          set -euo pipefail
+
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
           BRANCH="${{ github.ref_name }}"
           ZIP_PASSWORD="${{ github.event.inputs.zip_password }}"
-          COMPRESSION_LEVEL=${{ github.event.inputs.compression_level }}
+          CL="${{ env.COMPRESSION_LEVEL }}"
           OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
           URL="${{ env.URL }}"
+          DOMAIN="${{ env.DOMAIN }}"
+          TIMESTAMP="${{ env.TIMESTAMP }}"
+          WAIT_MS="${{ env.WAIT_MS }}"
 
           cd BROWSER
 
-          # تعیین مقصد (پوشه یا فایل‌های zip)
-          if [ -d "$FOLDER_NAME" ]; then
-            TARGET_DIR="$FOLDER_NAME"
-          else
-            TARGET_DIR="."   # فایل‌ها در ریشه‌ی BROWSER هستند
-          fi
+          TARGET_DIR="."
+          [ -d "$FOLDER_NAME" ] && TARGET_DIR="$FOLDER_NAME"
 
+          # ─── اطلاعات ZIP ─────────────────────────────────
           HAS_ZIP=false
           SHA256=""
           SIZE=""
@@ -357,220 +850,391 @@ jobs:
           DOWNLOAD_LINKS_MD=""
           LINKS_TXT_CONTENT=""
 
-          if compgen -G "${FOLDER_NAME}.zip" > /dev/null; then
+          if compgen -G "${FOLDER_NAME}.zip" > /dev/null 2>&1; then
             HAS_ZIP=true
             SHA256=$(sha256sum "${FOLDER_NAME}.zip" | awk '{print $1}')
             SIZE=$(du -sh "${FOLDER_NAME}.zip" | cut -f1)
-            for part in ${FOLDER_NAME}.zip ${FOLDER_NAME}.z[0-9]*; do
+            for part in "${FOLDER_NAME}.zip" "${FOLDER_NAME}.z"[0-9]*; do
               [ -f "$part" ] || continue
               TOTAL_PARTS=$((TOTAL_PARTS + 1))
               part_name=$(basename "$part")
-              part_encoded=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$part_name'))")
+              part_encoded=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$part_name")
               raw_link="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/BROWSER/${part_encoded}"
-              DOWNLOAD_LINKS_MD+="| $TOTAL_PARTS | \`${part_name}\` | [Download](${raw_link}) |"$'\n'
+              DOWNLOAD_LINKS_MD+="| ${TOTAL_PARTS} | \`${part_name}\` | [⬇️ Download](${raw_link}) |"$'\n'
               LINKS_TXT_CONTENT+="${raw_link}"$'\n'
             done
           fi
 
-          # links.txt
+          # ─── لینک‌های محتوا (folder mode) ───────────────
+          FOLDER_LINKS_MD=""
+          if [ -d "$FOLDER_NAME" ]; then
+            for f in index.html screenshot.png page.pdf page_monolith.html all_links.json; do
+              if [ -f "${FOLDER_NAME}/${f}" ]; then
+                enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$FOLDER_NAME/$f")
+                lnk="https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/${BRANCH}/BROWSER/${enc}"
+                FOLDER_LINKS_MD+="| \`${f}\` | [🔗 View](${lnk}) |"$'\n'
+              fi
+            done
+          fi
+
+          # ─── links.txt ───────────────────────────────────
           {
             if [ -n "$LINKS_TXT_CONTENT" ]; then
               printf '%s' "$LINKS_TXT_CONTENT"
             else
-              echo "No ZIP parts found. Folder accessible directly in repository."
+              echo "# No ZIP parts. Browse folder directly in repository."
+              echo "# https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/BROWSER/${FOLDER_NAME}"
             fi
           } > "${TARGET_DIR}/links.txt"
 
-          # README.md (English)
+          # ─── README.md (English) ──────────────────────────
           {
-            echo "# ${FOLDER_NAME}"
+            echo "# 🧩 ${FOLDER_NAME}"
+            echo ""
+            echo "> **Browser Extractor Pro** — Archived web page snapshot"
             echo ""
             echo "---"
             echo ""
             echo "## 📄 Page Information"
-            echo "| Property            | Value                          |"
-            echo "|---------------------|--------------------------------|"
-            echo "| **Original URL**     | \`${URL}\`                     |"
-            echo "| **Output type**      | ${OUTPUT_TYPE}                 |"
-            echo "| **Password Protected** | $([ -n "$ZIP_PASSWORD" ] && echo "**YES**" || echo "NO") |"
-            echo "| **Compression Level** | ${COMPRESSION_LEVEL}           |"
-            [ "$HAS_ZIP" = true ] && echo "| **Total Size**       | ${SIZE} (${TOTAL_PARTS} part(s)) |"
-            [ "$HAS_ZIP" = true ] && echo "| **SHA256 (zip)**     | \`${SHA256}\` |"
             echo ""
-            echo "---"
-            echo ""
-            echo "## 🔗 Download Links"
+            echo "| Property | Value |"
+            echo "|---|---|"
+            echo "| **Original URL** | \`${URL}\` |"
+            echo "| **Domain** | \`${DOMAIN}\` |"
+            echo "| **Captured At** | ${TIMESTAMP} (UTC) |"
+            echo "| **Output Type** | \`${OUTPUT_TYPE}\` |"
+            echo "| **Compression Level** | ${CL}/9 |"
+            echo "| **PDF Direction** | ${{ github.event.inputs.pdf_text_align }} |"
+            echo "| **Password Protected** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ YES" || echo "❌ NO") |"
             if [ "$HAS_ZIP" = true ]; then
-              echo "| # | File | Link |"
-              echo "|---|------|------|"
-              printf '%s' "$DOWNLOAD_LINKS_MD"
-              echo ""
-              echo "**💡 Tip:** For batch downloading, use the direct URLs listed in [\`links.txt\`](./links.txt)."
-            else
-              echo "Folder available directly in repository."
+              echo "| **Total ZIP Size** | ${SIZE} (${TOTAL_PARTS} part(s)) |"
+              echo "| **SHA256 Checksum** | \`${SHA256}\` |"
             fi
             echo ""
             echo "---"
             echo ""
             echo "## 📦 Contents"
-            echo "- \`index.html\` – Full rendered HTML (from Playwright)"
-            echo "- \`screenshot.png\` – Full‑page long screenshot"
-            echo "- \`page.pdf\` – Printable PDF"
-            echo "- \`assets/\` – Front‑end resources (filtered to main domain)"
-            echo "- \`page_monolith.html\` – Self‑contained HTML"
-            echo "- \`all_links.json\` – Extracted links"
-            echo "- \`links.txt\` – Direct download URLs for batch download"
+            echo ""
+            echo "| File | Description |"
+            echo "|---|---|"
+            echo "| \`index.html\` | Full rendered HTML captured by Playwright (JavaScript executed) |"
+            echo "| \`screenshot.png\` | Full-page screenshot of the rendered page |"
+            echo "| \`page.pdf\` | Printable PDF export of the page |"
+            echo "| \`page_monolith.html\` | Self-contained single-file HTML (all assets embedded) |"
+            echo "| \`all_links.json\` | Categorized link inventory (internal, external, APIs, feeds, etc.) |"
+            echo "| \`assets/\` | Captured front-end assets (CSS, JS, images, fonts) |"
+            echo "| \`links.txt\` | Direct download URLs for batch download tools |"
             echo ""
             echo "---"
             echo ""
-            echo "## 📦 How to Use"
-            if [ "$OUTPUT_TYPE" = "zip_only" ]; then
-              echo "1. **Download** all ZIP parts."
-              echo "2. **Extract** – parts combine automatically."
-              echo "3. **Explore** the extracted folder."
-            else
-              echo "1. **Download** the ZIP file (or folder)."
-              echo "2. **Extract** if needed."
-              echo "3. **Open** \`index.html\` or \`page_monolith.html\`."
-            fi
-            echo "4. **Verify** integrity using SHA256 checksum."
+            echo "## 🔗 Download"
             echo ""
-            echo "*Powered by [MR.MMD2019](https://github.com/MRmmd2019)*"
+            if [ "$HAS_ZIP" = true ]; then
+              echo "| # | File | Link |"
+              echo "|---|---|---|"
+              printf '%s' "$DOWNLOAD_LINKS_MD"
+              echo ""
+              echo "> **💡 Tip:** For batch download, copy URLs from [\`links.txt\`](./links.txt) and use \`aria2c -i links.txt\` or \`wget -i links.txt\`."
+              echo ""
+              echo "### 🔐 Verify Integrity"
+              echo ""
+              echo "\`\`\`bash"
+              echo "# Verify SHA256 checksum"
+              echo "sha256sum -c <<< '${SHA256}  ${FOLDER_NAME}.zip'"
+              echo ""
+              if [ -n "$ZIP_PASSWORD" ]; then
+                echo "# Extract with password"
+                echo "unzip -P YOUR_PASSWORD ${FOLDER_NAME}.zip"
+              else
+                echo "# Extract"
+                echo "unzip ${FOLDER_NAME}.zip"
+              fi
+              echo "\`\`\`"
+            elif [ -n "$FOLDER_LINKS_MD" ]; then
+              echo "| File | Link |"
+              echo "|---|---|"
+              printf '%s' "$FOLDER_LINKS_MD"
+            else
+              echo "Browse the folder directly in the repository."
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 🚀 How to Use"
+            echo ""
+            if [ "$OUTPUT_TYPE" = "zip_only" ]; then
+              echo "1. **Download** all ZIP part files listed above."
+              echo "2. **Place** all parts in the same folder."
+              echo "3. **Extract** — parts combine automatically: \`unzip ${FOLDER_NAME}.zip\`"
+              echo "4. **Verify** SHA256 checksum for integrity."
+              echo "5. **Open** \`index.html\` in any browser, or open \`page_monolith.html\` for a fully self-contained view."
+            elif [ "$OUTPUT_TYPE" = "folder_only" ]; then
+              echo "1. Clone or download this repository."
+              echo "2. Navigate to \`BROWSER/${FOLDER_NAME}/\`."
+              echo "3. Open \`index.html\` or \`page_monolith.html\` in your browser."
+            else
+              echo "1. **Download** the ZIP or browse the folder directly."
+              echo "2. **Extract** if using the ZIP: \`unzip ${FOLDER_NAME}.zip\`"
+              echo "3. **Open** \`index.html\` or \`page_monolith.html\` in any browser."
+              echo "4. **Verify** SHA256 for integrity (see checksum above)."
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 📊 Link Analysis"
+            echo ""
+            echo "The \`all_links.json\` file contains a full categorized inventory of all links found on the page:"
+            echo ""
+            echo "- **Internal Pages** — links within the same domain"
+            echo "- **Internal Assets** — CSS, JS, images, fonts, media, documents"
+            echo "- **External Resources** — CDN, fonts, analytics, social, ads"
+            echo "- **API Endpoints** — detected REST/GraphQL endpoints"
+            echo "- **Feeds** — RSS/Atom feeds"
+            echo "- **Special Links** — mailto, tel, data URIs, blob URLs"
+            echo ""
+            echo "---"
+            echo ""
+            echo "*Powered by [MR.MMD2019](https://github.com/MRmmd2019) · Browser Extractor Pro v3.0*"
           } > "${TARGET_DIR}/README.md"
 
-          # README_FA.md (Persian)
+          # ─── README_FA.md (فارسی) ────────────────────────
           {
-            echo "# ${FOLDER_NAME}"
+            echo "# 🧩 ${FOLDER_NAME}"
+            echo ""
+            echo "> **Browser Extractor Pro** — آرشیو اسنپ‌شات صفحه وب"
             echo ""
             echo "---"
             echo ""
             echo "## 📄 اطلاعات صفحه"
-            echo "| ویژگی               | مقدار                         |"
-            echo "|---------------------|-------------------------------|"
-            echo "| **لینک اصلی**       | \`${URL}\`                     |"
-            echo "| **نوع خروجی**       | ${OUTPUT_TYPE}                 |"
-            echo "| **محافظت با رمز**   | $([ -n "$ZIP_PASSWORD" ] && echo "**بله**" || echo "خیر") |"
-            echo "| **سطح فشرده‌سازی**  | ${COMPRESSION_LEVEL}           |"
-            [ "$HAS_ZIP" = true ] && echo "| **حجم کل**           | ${SIZE} (${TOTAL_PARTS} بخش) |"
-            [ "$HAS_ZIP" = true ] && echo "| **SHA256 (zip)**     | \`${SHA256}\` |"
             echo ""
-            echo "---"
-            echo ""
-            echo "## 🔗 لینک‌های دانلود"
+            echo "| ویژگی | مقدار |"
+            echo "|---|---|"
+            echo "| **لینک اصلی** | \`${URL}\` |"
+            echo "| **دامنه** | \`${DOMAIN}\` |"
+            echo "| **زمان آرشیو** | ${TIMESTAMP} (UTC) |"
+            echo "| **نوع خروجی** | \`${OUTPUT_TYPE}\` |"
+            echo "| **سطح فشرده‌سازی** | ${CL} از ۹ |"
+            echo "| **جهت PDF** | ${{ github.event.inputs.pdf_text_align }} |"
+            echo "| **محافظت با رمز** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ بله" || echo "❌ خیر") |"
             if [ "$HAS_ZIP" = true ]; then
-              echo "| # | فایل | لینک |"
-              echo "|---|------|------|"
-              printf '%s' "$DOWNLOAD_LINKS_MD"
-              echo ""
-              echo "**💡 نکته:** برای دانلود دسته‌ای از لینک‌های داخل [\`links.txt\`](./links.txt) استفاده کنید."
-            else
-              echo "پوشه مستقیماً در ریپازیتوری در دسترس است."
+              echo "| **حجم کل ZIP** | ${SIZE} (${TOTAL_PARTS} بخش) |"
+              echo "| **چکسام SHA256** | \`${SHA256}\` |"
             fi
             echo ""
             echo "---"
             echo ""
             echo "## 📦 محتویات"
-            echo "- \`index.html\` – HTML رندر شده (Playwright)"
-            echo "- \`screenshot.png\` – اسکرین‌شات تمام‌صفحه"
-            echo "- \`page.pdf\` – PDF قابل چاپ"
-            echo "- \`assets/\` – منابع فرانت‌اند (محدود به دامنه اصلی)"
-            echo "- \`page_monolith.html\` – HTML تک‌فایلی"
-            echo "- \`all_links.json\` – لینک‌های استخراج‌شده"
-            echo "- \`links.txt\` – لینک‌های مستقیم دانلود"
+            echo ""
+            echo "| فایل | توضیح |"
+            echo "|---|---|"
+            echo "| \`index.html\` | HTML کامل رندرشده توسط Playwright (JavaScript اجرا شده) |"
+            echo "| \`screenshot.png\` | اسکرین‌شات تمام‌صفحه از صفحه رندرشده |"
+            echo "| \`page.pdf\` | خروجی PDF قابل چاپ از صفحه |"
+            echo "| \`page_monolith.html\` | HTML تک‌فایلی خودکفا (تمام assets embed شده) |"
+            echo "| \`all_links.json\` | فهرست دسته‌بندی‌شده لینک‌ها (داخلی، خارجی، API، فید و ...) |"
+            echo "| \`assets/\` | منابع فرانت‌اند ذخیره‌شده (CSS، JS، تصاویر، فونت‌ها) |"
+            echo "| \`links.txt\` | لینک‌های مستقیم دانلود برای دانلود دسته‌ای |"
             echo ""
             echo "---"
             echo ""
-            echo "## 📦 روش استفاده"
+            echo "## 🔗 دانلود"
+            echo ""
+            if [ "$HAS_ZIP" = true ]; then
+              echo "| # | فایل | لینک |"
+              echo "|---|---|---|"
+              printf '%s' "$DOWNLOAD_LINKS_MD"
+              echo ""
+              echo "> **💡 نکته:** برای دانلود دسته‌ای، لینک‌ها را از [\`links.txt\`](./links.txt) کپی کنید و از \`aria2c -i links.txt\` یا \`wget -i links.txt\` استفاده کنید."
+              echo ""
+              echo "### 🔐 بررسی صحت فایل"
+              echo ""
+              echo "\`\`\`bash"
+              echo "# بررسی چکسام SHA256"
+              echo "sha256sum -c <<< '${SHA256}  ${FOLDER_NAME}.zip'"
+              echo ""
+              if [ -n "$ZIP_PASSWORD" ]; then
+                echo "# استخراج با رمز عبور"
+                echo "unzip -P YOUR_PASSWORD ${FOLDER_NAME}.zip"
+              else
+                echo "# استخراج فایل"
+                echo "unzip ${FOLDER_NAME}.zip"
+              fi
+              echo "\`\`\`"
+            elif [ -n "$FOLDER_LINKS_MD" ]; then
+              echo "| فایل | لینک |"
+              echo "|---|---|"
+              printf '%s' "$FOLDER_LINKS_MD"
+            else
+              echo "پوشه مستقیماً در ریپازیتوری قابل دسترسی است."
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            echo "## 🚀 روش استفاده"
+            echo ""
             if [ "$OUTPUT_TYPE" = "zip_only" ]; then
               echo "1. **دانلود:** تمام بخش‌های ZIP را دانلود کنید."
-              echo "2. **استخراج:** بخش‌ها خودکار ترکیب می‌شوند."
-              echo "3. **مشاهده:** وارد پوشه استخراج‌شده شوید."
+              echo "2. **قرار دادن:** تمام بخش‌ها را در یک پوشه قرار دهید."
+              echo "3. **استخراج:** بخش‌ها خودکار ترکیب می‌شوند: \`unzip ${FOLDER_NAME}.zip\`"
+              echo "4. **بررسی صحت:** از چکسام SHA256 استفاده کنید."
+              echo "5. **مشاهده:** فایل \`index.html\` یا \`page_monolith.html\` را در مرورگر باز کنید."
+            elif [ "$OUTPUT_TYPE" = "folder_only" ]; then
+              echo "1. این ریپازیتوری را clone یا دانلود کنید."
+              echo "2. به مسیر \`BROWSER/${FOLDER_NAME}/\` بروید."
+              echo "3. فایل \`index.html\` یا \`page_monolith.html\` را در مرورگر باز کنید."
             else
-              echo "1. **دانلود:** فایل ZIP (یا پوشه) را دریافت کنید."
-              echo "2. **استخراج:** در صورت نیاز استخراج کنید."
-              echo "3. **باز کردن:** \`index.html\` یا \`page_monolith.html\` را باز کنید."
+              echo "1. **دانلود:** فایل ZIP را دانلود کنید یا پوشه را مستقیم مرور کنید."
+              echo "2. **استخراج:** در صورت استفاده از ZIP: \`unzip ${FOLDER_NAME}.zip\`"
+              echo "3. **باز کردن:** فایل \`index.html\` یا \`page_monolith.html\` را در مرورگر باز کنید."
+              echo "4. **بررسی صحت:** از چکسام SHA256 استفاده کنید."
             fi
-            echo "4. **بررسی صحت:** از چکسام SHA256 استفاده کنید."
             echo ""
-            echo "*نیرو گرفته از [MR.MMD2019](https://github.com/MRmmd2019)*"
+            echo "---"
+            echo ""
+            echo "## 📊 تحلیل لینک‌ها"
+            echo ""
+            echo "فایل \`all_links.json\` شامل فهرست کامل و دسته‌بندی‌شده تمام لینک‌های یافت‌شده در صفحه است:"
+            echo ""
+            echo "- **صفحات داخلی** — لینک‌های درون همان دامنه"
+            echo "- **منابع داخلی** — CSS، JS، تصویر، فونت، مدیا، اسناد"
+            echo "- **منابع خارجی** — CDN، فونت‌ها، analytics، شبکه‌های اجتماعی، تبلیغات"
+            echo "- **API Endpoints** — مسیرهای REST/GraphQL شناسایی‌شده"
+            echo "- **فیدها** — فیدهای RSS/Atom"
+            echo "- **لینک‌های خاص** — mailto، tel، data URI، blob"
+            echo ""
+            echo "---"
+            echo ""
+            echo "*نیرو گرفته از [MR.MMD2019](https://github.com/MRmmd2019) · Browser Extractor Pro v3.0*"
           } > "${TARGET_DIR}/README_FA.md"
 
-          # به‌روزرسانی BACKUP_DIR
-          if [ -n "${{ env.BACKUP_DIR }}" ] && [ -d "${{ env.BACKUP_DIR }}" ]; then
-            cp -r . "${{ env.BACKUP_DIR }}"
-          fi
-          echo "READMEs and links.txt generated."
+          echo "✅ README.md, README_FA.md, and links.txt generated."
 
-      - name: Incremental Commit & Push
+      # ── ۱۱. Commit & Push ────────────────────────────────
+      - name: "🚀 Commit and push all files"
         run: |
+          set -uo pipefail
+
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           BRANCH="${{ github.ref_name }}"
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
 
-          git config user.name "github-actions"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin "$BRANCH"
-          git reset --hard origin/"$BRANCH"
+          # ─── sync با remote ───────────────────────────────
+          git fetch origin "$BRANCH" --quiet
 
-          mkdir -p BROWSER
-          if [ -d "$BACKUP_DIR" ]; then
-            cp -r "$BACKUP_DIR"/* BROWSER/ 2>/dev/null || true
-          fi
-
-          ALL_FILES=()
-          while IFS= read -r -d '' f; do ALL_FILES+=("$f"); done < <(find BROWSER -type f -print0 | sort -z)
-
-          if [ ${#ALL_FILES[@]} -eq 0 ]; then
-            echo "Nothing to push."
-            exit 0
-          fi
-
-          push_batch() {
-            local batch=("$@")
-            for f in "${batch[@]}"; do git add "$f" 2>/dev/null || true; done
-            if ! git diff --cached --quiet; then
-              git commit -m "[Bot] Add extracted page: ${FOLDER_NAME} [skip ci]" --quiet
-              local retry=0
-              while [ $retry -lt 5 ]; do
-                if timeout 180 git push origin HEAD:"$BRANCH"; then
-                  echo "Batch pushed successfully."
-                  return 0
-                else
-                  echo "Push failed, attempt $((retry+1))/5..."
-                  sleep $(( RANDOM % 10 + 5 ))
-                  git fetch origin "$BRANCH" --quiet
-                  if ! git rebase origin/"$BRANCH" --quiet; then
-                    echo "Rebase conflict – aborting batch."
-                    git rebase --abort
-                    return 1
-                  fi
-                fi
-                retry=$((retry+1))
-              done
+          sync_with_remote() {
+            local attempt=$1
+            echo "🔄 Sync attempt ${attempt}/5..."
+            git fetch origin "$BRANCH" --quiet
+            if git rebase origin/"$BRANCH" --quiet 2>/dev/null; then
+              return 0
+            else
+              git rebase --abort 2>/dev/null || true
+              git reset --hard origin/"$BRANCH" --quiet
               return 1
             fi
           }
 
+          git reset --hard origin/"$BRANCH" --quiet
+
+          mkdir -p BROWSER
+
+          # کپی backup به BROWSER
+          if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
+            cp -rf "$BACKUP_DIR"/. BROWSER/ 2>/dev/null || true
+          fi
+
+          # ─── جمع‌آوری فایل‌ها ────────────────────────────
+          mapfile -t ALL_FILES < <(find BROWSER -type f | sort)
+
+          if [ "${#ALL_FILES[@]}" -eq 0 ]; then
+            echo "⚠️ Nothing to push."
+            exit 0
+          fi
+
+          echo "📦 Total files to commit: ${#ALL_FILES[@]}"
+
+          # ─── push با fallback ────────────────────────────
+          do_push() {
+            local retry=0
+            while [ $retry -lt 5 ]; do
+              if timeout 180 git push origin HEAD:"$BRANCH" --quiet; then
+                echo "✅ Push successful."
+                return 0
+              fi
+              retry=$((retry + 1))
+              echo "⚠️ Push attempt ${retry}/5 failed. Retrying in $((retry * 5))s..."
+              sleep $((retry * 5))
+              sync_with_remote "$retry" || true
+            done
+            echo "❌ All push attempts failed."
+            return 1
+          }
+
+          # ─── commit در batch‌های ۵۰ فایلی ───────────────
+          BATCH_SIZE=50
           batch=()
-          for file in "${ALL_FILES[@]}"; do
-            batch+=("$file")
-            if [ ${#batch[@]} -ge 3 ]; then
-              push_batch "${batch[@]}" || { echo "❌ Push batch failed!"; exit 1; }
+          batch_num=0
+
+          commit_and_push_batch() {
+            local -a files=("$@")
+            for f in "${files[@]}"; do
+              git add "$f" 2>/dev/null || true
+            done
+            if git diff --cached --quiet; then
+              echo "ℹ️ Batch ${batch_num}: no changes."
+              return 0
+            fi
+            git commit -m "🤖 [Bot] Archive: ${FOLDER_NAME} (batch ${batch_num}) [skip ci]" --quiet
+            do_push || return 1
+          }
+
+          for f in "${ALL_FILES[@]}"; do
+            batch+=("$f")
+            if [ "${#batch[@]}" -ge "$BATCH_SIZE" ]; then
+              batch_num=$((batch_num + 1))
+              commit_and_push_batch "${batch[@]}" || { echo "❌ Batch ${batch_num} push failed!"; exit 1; }
               batch=()
             fi
           done
-          if [ ${#batch[@]} -gt 0 ]; then
-            push_batch "${batch[@]}" || { echo "❌ Push final batch failed!"; exit 1; }
+
+          # آخرین batch
+          if [ "${#batch[@]}" -gt 0 ]; then
+            batch_num=$((batch_num + 1))
+            commit_and_push_batch "${batch[@]}" || { echo "❌ Final batch push failed!"; exit 1; }
           fi
 
-          echo "✅ All files pushed successfully."
+          echo "✅ All files committed and pushed successfully."
 
-      - name: Cleanup temporary files
+      # ── ۱۲. Summary ──────────────────────────────────────
+      - name: "📊 Workflow Summary"
+        if: always()
+        run: |
+          echo "## 🧩 Browser Extractor Pro — Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | \`${{ github.event.inputs.url }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Output type** | \`${{ github.event.inputs.output_type }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Compression** | ${{ env.COMPRESSION_LEVEL }}/9 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Browser** | ${{ env.BROWSER_TYPE }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Folder** | \`BROWSER/${{ env.FOLDER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -d "BROWSER/${{ env.FOLDER_NAME }}" ]; then
+            FILE_COUNT=$(find "BROWSER/${{ env.FOLDER_NAME }}" -type f | wc -l)
+            FOLDER_SIZE=$(du -sh "BROWSER/${{ env.FOLDER_NAME }}" 2>/dev/null | cut -f1 || echo "?")
+            echo "| **Files captured** | ${FILE_COUNT} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Folder size** | ${FOLDER_SIZE} |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Workflow completed." >> $GITHUB_STEP_SUMMARY
+
+      # ── ۱۳. Cleanup ──────────────────────────────────────
+      - name: "🧹 Cleanup temporary files"
         if: always()
         run: |
           rm -rf /tmp/backup_* 2>/dev/null || true
-          rm -rf /tmp/download_backup_* 2>/dev/null || true
-          rm -rf /tmp/orig_files_* 2>/dev/null || true
-          echo "✅ Temporary files cleaned up"
-
+          rm -f extract.js 2>/dev/null || true
+          echo "✅ Cleanup done."

@@ -1,0 +1,1033 @@
+/* MAIN LAYOUT */
+body {
+	margin:  0;
+	background: #d1dde3 url('bg2.gif') repeat left;
+	font-family: Tahoma;
+	font-size: 12px;
+}
+
+a {
+	color: #000;
+	font-weight: bold;
+	text-decoration: none;
+}
+
+a:hover {
+	color: #4d707f;
+}
+
+img {
+	border: 0px;
+}
+
+h2 {
+	display: inline-block;
+}
+
+#container {
+    width: 960px;
+    margin: 0 auto;
+    background: #bccbd2;
+    padding: 0 2px 0 2px;
+    border-left: 1px solid #4b5b6e;
+    border-right: 1px solid #4b5b6e;
+}
+
+#leftColumn, #rightColumn {
+	display: table-cell;
+	vertical-align: top;
+    padding: 0px;
+}
+
+#leftColumn { 
+    width: 180px;
+    padding: 0px;
+    border-left: 1px solid #4b5b6e;
+    border-right: 1px solid #4b5b6e;
+    background: #d7dee5;
+} 
+
+#rightColumn { 
+    padding-left: 1px;
+    margin: 10px;
+    border-right: 1px solid #4b5b6e;
+    background: #bccbd2;
+} 
+
+/* CONTENT COLUMN */
+
+#pageContent {
+    background: #ebebeb;
+    border-left: 1px solid #4b5b6e;
+    padding:  5px;
+	padding-bottom: 50px; 
+    min-height: 2100px;
+    height: 100%;
+    width: 765px; 
+}
+
+#pageContent p {
+	padding: 0 5px;
+}
+
+/* NAVIGATION COLUMN */
+
+#leftColumn h1 {
+	padding:  0px 0 15px 15px;
+}
+
+#leftColumn h3 {
+	background: url('modulehead.gif') no-repeat left;
+	padding-left: 2px;
+	padding-top: 3px;
+	height: 21px;
+	font-size: 1.1em;
+	font-variant: small-caps;
+	font-family: arial;
+}
+
+#leftColumn ul {
+	padding: 0px 5px 0px 22px;
+	list-style-image: url('key.gif');
+}
+
+#leftColumnSearch {
+	padding-left: 5px;
+}
+
+#leftColumnSearch input[type=text] {
+	width: 157px;
+}
+
+#leftColumnSearch input[type=submit] {
+	margin-top: 2px;
+}
+
+/* HOME PAGE STUFF */
+
+#homepageText {
+	float: left;
+	width: 550px;
+}
+
+#homepagePopularSeries {	
+	float: left;
+	padding-left: 20px;
+	padding-bottom: 10px;
+    border-left: 1px solid #4b5b6e;
+}
+
+#homepagePopularSeries h3 {
+	padding-top: 0;
+	margin-top: 10px;
+}
+
+#homepagePopularSeries ul {	
+
+	list-style-image: url('key_content.gif');
+	margin: 0;
+	padding: 0 10px;
+}
+
+#homepageLatestSoundtracks {
+	clear:both;
+}
+
+
+/************************************/
+
+
+.my_albums {
+	border: 0px;
+	width: 100%;
+}
+
+.my_albums tr:hover {
+	opacity: 0.5;
+}
+
+.my_albums_left {
+	border: 0px;
+}
+
+.my_albums_right {
+	border-left: 1px solid black;
+	color: #064a75;
+	padding-left: 5px;
+	width: 50px;
+}
+
+.my_albums_download {
+	/*border-left: 1px solid black;*/
+	color: #064a75;
+	padding-left: 5px;
+	width: 135px;
+}
+
+
+#requests_table {
+	border: 1px solid black;
+ 	border-collapse: collapse;
+	width: 100%;
+}
+#requests_table tr:hover {
+	background-color: #aaa;
+}
+
+#requests_table th {
+	font-size: 16px;
+	border: 1px solid black;
+	background-color: #ccc;
+
+}
+
+#requests_table .requests_date {
+	width: 70px;
+}
+
+
+#requests_table td, #requests_table th {
+	padding: 4px;
+}
+
+
+
+
+.pagination ul {
+  float:left;
+  margin-top:0px;
+   padding: 10px 0px;
+  list-style: none;
+}
+
+.pagination ul li {
+  float:left;
+  width:auto;
+  border-top:none;
+}
+
+.pagenav {
+  padding:7px 7px;
+}
+
+
+span.pagenav:last-child {
+  color:#fff;
+  font-size: 16px;
+  background: rgb(51, 105, 129);
+  font-weight: bold;
+}
+
+.pagination a {
+  font-weight:bold;
+  font-size: 16px;
+}
+
+.pagination a:hover {
+  color:#fff;
+  background: rgb(51, 105, 129);
+  -webkit-transition-duration: 0s;
+  -webkit-transition-timing-function: ease;
+  transition-duration: 0s;
+  transition-timing-function: ease;
+}
+
+.pagination-prev {
+   padding-right: 15px;
+}
+
+.pagination-next {
+   padding-left: 15px;
+}
+
+p.pagination a {
+	color:#333;
+	padding: 0 5px;
+}
+
+.album_category_click, .user_category_click, .album_type_click {
+	float: left;
+	padding: 10px;
+	border: 1px solid black;
+	background-color: #EEE;
+	cursor: pointer;
+}
+
+.album_category_darker {
+	background-color: #BBB;
+}
+
+.album_category_wrap:after {
+    content: '';
+    display: block;
+    clear: both;
+}
+
+
+
+/************************************/
+
+
+#songlist, #top40, .albumList, .uploadList, .requestList {
+	text-align: left;
+	width: 745px;
+	border: 1px solid #444;
+	border-collapse: collapse;
+	margin-left: 10px;
+}
+
+#songlist .plSel {
+	background: rgba(204, 204, 204, 0.8);
+}
+
+
+
+#songlist th, #top40 th, .albumList th, .uploadList th, .requestList th {
+	border-bottom: 1px solid #444;
+	border-top: 1px solid #444;
+	padding: 3px;
+	background-color: #CCCC99;
+}
+
+.uploadList th:nth-child(2){
+	width: 80px; 
+}
+
+.uploadList th:nth-child(3){
+	width: 40px; 
+}
+.uploadList th:nth-child(4){
+	width: 100px;
+}
+
+.uploadList th:nth-child(5){
+	width: 80px;
+}
+
+
+.requestList th:nth-child(1){
+	width: 300px; 
+}
+
+#songlist tr td, #top40 tr td, .albumList tr td, .uploadList tr td, .requestList tr td {
+	padding: 3px;
+}
+
+#songlist tr:hover, #top40 tr:hover, .albumList tr:hover, .uploadList tr:hover, .requestList tr:hover {
+	background-color: #AAA;
+}
+
+.playlistDownloadSong i, .playlistAddTo i {
+	font-size: 18px; 
+	padding-top: 1px;
+}
+
+.clickable-row a {
+	height: 100%
+	width: 100%;
+	display:block;
+}
+
+.clickable-row :hover {
+	cursor: pointer;
+}
+
+.playTrack {
+	height:100%;
+	width:100%;
+	display:block;
+	cursor:pointer
+}
+
+.arrow-play {
+	width: 0;
+	height: 0;
+	border-top: 5px solid transparent;
+	border-bottom: 5px solid transparent;
+	border-left: 5px solid #8d8d8d;
+}
+
+.albumImage { 
+	float: left;
+	padding:  3px;
+}
+
+.albumImage img { 
+	border: solid 1px;
+}
+
+.albuminfoAlternativeTitles {
+	margin-top: -15px;
+	margin-bottom: 20px;
+	font-size: 11px;
+}
+
+.albumMassDownload, .albumEditLink, .playlistMassDownload  {
+	height: 35px;
+	padding-left: 10px;
+	text-align: left;
+}
+
+.playlistMassDownload  {
+	height: 70px;
+}
+
+.albumMassDownload i, .albumEditLink i, .playlistMassDownload i {
+	display: inline-block;
+	vertical-align: middle;
+	padding-top: 5px;
+}
+
+
+.albumMassDownload div, .albumEditLink div, .playlistMassDownload div {
+	display: inline-block;
+	vertical-align: middle;
+	padding-left: 5px;
+}
+
+.albumEditLink {
+	margin-top:  -10px;
+}
+
+.albumEditLink i {
+	font-size: 20px;
+}
+
+.albumEditLink div {
+	padding-top: 3px;
+	padding-left: 8px;
+}
+
+.albumFavorite:hover {
+	cursor: pointer;
+}
+
+.albumFavorite {
+	height: 35px;
+	width:150px;
+	padding-left: 13px;
+	text-align: left;
+}
+
+.albumFavorite i {
+	display: inline-block;
+	vertical-align: middle;	
+	font-size: 18px;
+	color: red;
+}
+
+
+.albumFavoriteText {	
+	display: inline-block;
+	vertical-align: middle;	
+	padding-left: 8px;
+}
+
+
+.albumListSize {
+	position: absolute;
+}
+
+.albumListSizeIconCompact, .albumListSizeIconLarge {
+	color:red;
+	position: relative;
+	top: -27px;
+	left: 704px;
+}
+
+.albumListSizeIconCompact:hover, .albumListSizeIconLarge:hover {
+	color:black;
+	cursor: pointer;
+}
+
+#top40 tr th, .albumList tr th, .uploadList tr th, .requestList tr th {
+	height: 20px;
+}
+
+#top40 .material-icons:hover, , .albumList .material-icons:hover, .uploadList .material-icons:hover, .requestList .material-icons:hover {
+	cursor: pointer;
+}
+
+.latestSoundtrackHeading {
+	margin:  20px 0;
+}
+
+
+.albumList th:nth-child(3) {
+	width: 120px;
+}
+
+.albumList th:nth-child(4) {
+	width: 70px;
+}
+
+.albumList th:nth-child(5) {
+	width: 40px;
+}
+
+td.albumIcon {
+	height: 60px;
+	width: 60px;
+}
+
+td.albumIcon img {
+	height: 60px;
+	width: 60px;
+}
+
+td.albumIconLarge {
+	width: 126px;
+	vertical-align: top;
+	text-align: left;
+}
+
+td.albumIconLarge p {
+	margin: 3px;
+	margin-left: -5px;
+	margin-bottom: 5px;
+}
+
+td.albumIcon img, td.albumIconLarge img {
+	border: solid 1px;
+}
+
+.albumIconDefaultSmall  {
+	height: 60px;
+	width: 60px;
+	border: solid 1px;
+}
+
+.albumIconDefaultSmall i {
+	padding-left: 19px;
+	padding-top: 17px;	
+	font-size: 25px;
+}
+
+.albumIconDefaultLarge  {
+	height: 117px;
+	width: 117px;
+	border: solid 1px;
+}
+
+.albumIconDefaultLarge i {
+	padding-left: 40px;
+	padding-top: 35px;	
+	font-size: 35px;
+}
+
+.playlistAddCell {
+	text-align: center;
+	width: 20px
+}
+
+.playlistAddCell div, #top40 .movement div {
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.playlistAddTo i, #top40 .movement i {
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.playlistAddCell :hover {
+	cursor: pointer;
+}
+
+
+
+.songDownloadLink i {
+	float:left;
+	font-size: 16px;
+	padding-right: 5px;
+}
+
+
+
+.reply_to_comment {
+    padding: 10px 0px;
+    clear: left;
+    width: auto;
+    float: right;
+    font-size: 1.5em;
+    font-family: 'BebasNeueRegular', Helvetica, Arial, sans-serif;
+}
+
+.reply_to_comment a {
+    text-decoration:none;
+    padding: 12px 80px 10px;
+    background: rgb(102, 167, 197);
+    border: 3px solid #307a9952;
+    border-radius: 10px;
+    -webkit-border-radius: 10px;
+    -moz-border-radius: 10px;
+}
+
+.reply_to_comment a:hover {
+    background-color: #4385A7;
+}
+
+
+
+/*------------Comments Section
+/*-------------------------------------------------*/
+
+.alt2 img {
+    max-width: 375px!important;
+}
+
+.message img {
+    max-width: 465px!important;
+}
+
+.comment_message img {
+    max-width: 505px;
+}
+
+.comment_message iframe {
+    max-width: 505px;
+}
+
+.bbcode_container {
+    margin-top: -15px;
+    margin-bottom: 15px;
+}
+
+a#comments, img.comments_headinggraphic2, img.comments_headinggraphic {
+    display: none;
+}
+
+#comments {
+	background-position: 20px;
+	font-family: 'BebasNeue', Helvetica, Arial, sans-serif;
+	color:#fff;
+	text-shadow:-1px 1px 1px rgba(0,0,0,.7);
+	font-size: 1.5em;
+	padding:10px;
+	background: url('https://images.khinsider.com/images/comments_headingbg.png');
+	padding: 4px 0px;
+	width: 291px;
+	margin-left: -36px;
+	float: left;
+	background-position: 8px 0;
+	text-align: left;
+	padding-left: 25px;
+}
+
+.comments_headinggraphic {
+    float: left;
+    clear: left;
+    margin: -21px -36px;
+}
+
+.comments_headinggraphic2 {
+    margin: -66px 0 0 235px;
+
+
+    float: left;
+}
+
+.comment_wrap {
+  width:729px;
+  margin-bottom: 20px;
+  float:left;
+  min-height:150px;
+  height:auto;
+}
+
+.comment_userdata {
+  width: 96%;
+  height:100%;
+  float: left;
+  padding: 8px;
+  border-radius: 10px;
+  -moz-border-radius: 10px;
+  -webkit-border-radius: 10px;
+}
+
+.comment_message {
+  width: 729px;
+  border-radius:10px;
+  -webkit-border-radius:10px;
+  -moz-border-radius:10px;
+  float:left;
+  padding:10px 17px 10px 17px;
+  margin-top: 20px;
+  background: #f2f2f2;
+  background-repeat:no-repeat;
+  background-position:3px 0;
+  color:#444;
+  border: 1px solid #E0DFDF;
+  position:relative;
+  clear: left;
+  word-break: break-word;
+}
+
+.comment_message table {
+	margin-top: -103px;
+	background:rgba(255,255,255,.3);
+    border:1px solid rgba(0,0,0,.6);
+    text-shadow:none;
+	margin-bottom: -40px;
+    display: contents;
+}
+
+.comment_message .quote {
+	font-style:italic;
+  margin-left: 15px;
+  margin-right: 15px;
+  padding: 13px;
+  border: 1px #e0dfdf solid;
+  background: #eaeaea;
+}
+
+.comment_graphic {
+	position:absolute;
+	top: -19px;
+	left: 24px;
+}
+
+.comment_userdata p{
+	text-align: left;
+	padding-left: 10px;
+}
+
+.comment_useravatar img {
+        background-color: #48758B;
+	border-radius:10px;
+        -webkit-border-radius:10px;
+        -moz-border-radius:10px;
+        overflow:hidden;
+	width: 50px;
+	height: 50px;
+	float: left;
+}
+
+.comment_useravatar img {
+	width: 50px;
+}
+
+.comment_username {
+	margin: 5px 10px 0 10px;
+	width: 50%;
+	float: left;
+	font-size: 1em;
+}
+
+.comment_username a {
+        text-decoration: none;
+        font-family: 'BebasNeueRegular';
+	color:rgba(50, 104, 132, 1);
+	font-size:1.4em;
+	margin:0 auto;
+}
+     
+.comment_username a:hover {
+	color: #66A7C5;
+}
+
+.comment_userinfo {
+    padding-right: 5px;
+    float: left;
+    padding-bottom: 0px;
+    margin-left: 15px;
+    -moz-border-radius: 10px;
+    width: 446px;
+    text-shadow: 0px 1px 0px rgba(255,255,255,1);
+    margin-top: 1px;
+}
+
+.status {
+    margin-left: 15px;
+
+}
+
+/*----------------vB Classes
+/*---------------------------------------------------*/
+
+
+.spoiler {
+    text-shadow: none;
+    background: #333;
+}
+
+.bbcode_quote, blockquote {
+	background:rgba(255,255,255,.3);
+	background-image:url('https://images.khinsider.com/images/quote_bg.png');
+	background-repeat:no-repeat;
+	border: 1px solid #ccc;
+    text-shadow:none;
+	box-shadow: 0 0 7px rgba(0,0,0,.05);
+	padding: 28px 20px;
+}
+
+blockquote {
+     font-style:italic;
+     color:#4a4a4a;
+}
+
+.quote_container {
+	width: auto;
+}
+
+.comment_meta {
+	margin: 5px 0;
+}
+
+br {
+   
+	 line-height: 1;
+}
+
+.article-text {
+         float:left;
+         clear: left;
+}
+
+.top {
+       background: #66A7C5;
+       position: fixed;
+       left: 5px;
+       top: 5px;
+       border-radius: 10px;
+}
+
+.top a {
+       width: 76.1px;
+       height: 62.1px;
+       display: block;
+       background: url('https://images.khinsider.com/images/backtop.png') 50% 0% no-repeat;
+}
+
+
+#nn_skin {
+ width: 1600px;
+ height: 970px;
+ z-index: 0;
+ position: fixed;
+ top: 65px;
+ left: 50%;
+ margin-left: -800px;
+}
+
+#editAlbumInfoTable {
+	width: 100%;
+	border-collapse: collapse;
+}
+#editAlbumInfoTable tr:hover {
+	background-color: #d2d2d2;
+}
+#editAlbumInfoTable th {
+	width: 50%;
+}
+
+ #editAlbumInfoTable td:nth-child(1) {
+  border-right: 1px black solid;
+}
+
+#editAlbumInfoTable td {
+	padding: 7px; 
+	vertical-align: top;
+}
+
+#editAlbumInfoSubmit {
+	padding: 10px 100px;
+	margin-left: 200px;
+	margin-top: 30px;
+}
+
+#editAlbumInfoTable input, #editAlbumInfoTable textarea {
+	width: 350px;
+}
+
+
+#imageUpload { 
+  margin: 5px; 
+}
+#response .uploadedImage {
+	border: solid 1px;
+	margin: 5px; 
+}
+
+
+.currentImageDiv {
+	display: inline;
+	position: relative;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.currentImageDiv:hover {
+	opacity: 0.5;	    
+	cursor: pointer;
+}
+
+.currentImageDiv span {
+	display: none;
+}
+
+.uploadedImageDiv {	
+	display: inline-block;
+	font-size: 60px;
+	margin-left: 70px;
+	padding-top: 12px;
+	opacity: 0.6;
+	color: red;
+}
+
+.uploadedImageDiv span {	
+	display: inline-block;
+	font-size: 60px;
+}
+
+.uploadedImageDiv:hover {
+	opacity: 1;	    
+	cursor: pointer;
+}
+
+.currentImageDiv:hover span, .currentImageDivDeleted span {
+	display: inline-block;
+	position: absolute;
+	font-size: 72px;
+	right: 25px;
+	bottom: 30px;
+	z-index:100;	
+	opacity: 1;
+	color: red;
+}
+
+.uploadedImageDiv span:hover, .currentImageDiv span:hover {
+	opacity: 2;
+	
+}
+
+.currentImageDivDeleted {
+	opacity: 0.2;
+	
+}
+
+/* moronic fix for misaligned upload checkbox */
+
+#editAlbumInfoTable input[type=checkbox]{
+	margin-left: -165px;
+}
+
+/* change log dropdown */
+.tooltip, .tooltip_below {
+	display:none;
+  background-color: #444;
+  color: #fff;
+  text-align: left;
+  padding: 5px;
+	margin-top: 5px;
+  border-radius: 6px;
+ 
+  /* Position the tooltip text - see examples below! */
+  position: absolute;	
+  z-index: 1;
+}
+
+.tooltip {
+	margin-left: 183px;
+}
+
+.tooltip_below {
+	margin-left: 0;
+}
+
+
+
+.change_log_dropdown:hover {
+	cursor:pointer;	
+}
+
+.change_log_dropdown:hover .tooltip, .change_log_dropdown:hover .tooltip_below {
+	display:block;
+}
+
+
+
+#playlistTitle {
+	font-size: 18px;
+	font-weight: bold; 
+}
+
+#playlistTitle a i {
+	font-weight: normal;
+	padding-left: 10px;
+	color:red;	
+}
+
+#playlistEditName {
+	display: none;
+}
+
+
+.playlistPopup {
+	z-index: 10;
+	margin-left: -250px;
+	width: 200px;
+	position: absolute;
+	text-align: left;
+	background: rgba(204, 204, 204, 1);
+	padding: 0px 10px 10px 10px;
+	border: 1px black solid;
+	border-radius: 3px;	
+}
+
+.playlistUp:hover, .playlistDown:hover, .albumDelete:hover {
+	cursor: pointer;
+}
+
+.playlistMassDownload {
+	padding-top: 10px;
+	font-weight: bold;
+	font-size: 14px;
+}
+
+.playlistMassDownload:hover {
+	cursor: pointer;
+}
+
+
+#playlistMassDownloadLink {
+	display: block;
+	font-weight: normal;
+	margin-left: 7px
+	cursor: n;
+}
+
+#playlistMassDownloadLink:hover {
+	cursor: auto; 
+}
+
+
+#renameImages, #deleteImages, #renameTracks {
+	display: none;
+}
+
+#renameImagesTitle:hover, #deleteImagesTitle:hover, #renameTracksTitle:hover {
+	cursor: pointer;
+}
+
+.renameImageDiv {
+	padding: 10px;
+	clear: both;
+}
+
+.renameImageDiv div {
+	float: left;
+}
+
+.renameImageDiv div input {
+	padding: 2px;
+	margin: 30px 0px 0px 10px;
+}
+
+.renameImageDiv div p {
+	margin-left: 5px;
+}
+
+.material-icons.txt_info_file {
+	padding-left: 2px;
+	font-size: 16px;
+ }

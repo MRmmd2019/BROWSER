@@ -465,25 +465,41 @@ jobs:
             });
           }
 
-          // ─── Auto-scroll برای لود lazy content ───────────────────
-          async function autoScroll(page) {
-            await page.evaluate(async () => {
-              await new Promise(resolve => {
-                let lastH = 0;
-                let tries = 0;
-                const MAX  = 50;
-                const iv = setInterval(() => {
-                  window.scrollBy(0, 600);
-                  const h = document.body.scrollHeight;
-                  if (h === lastH || ++tries >= MAX) {
-                    clearInterval(iv);
-                    window.scrollTo(0, 0);
-                    resolve();
-                  }
-                  lastH = h;
-                }, 250);
-              });
-            }).catch(() => {});
+          // ─── Smart scroll: scrolls step-by-step, waits for images to load ──
+          async function smartScroll(page) {
+            const scrollStep = 600;
+            const maxSteps = 120;
+            const idleTimeout = 15000;
+            const finalWait = 8000;
+            const noChangeThreshold = 4;
+
+            let previousHeight = 0;
+            let noChangeCount = 0;
+
+            for (let step = 0; step < maxSteps; step++) {
+              await page.evaluate((dy) => window.scrollBy(0, dy), scrollStep);
+
+              // منتظر آرام‌شدن شبکه (تصاویر در حال بارگذاری)
+              try {
+                await page.waitForLoadState('networkidle', { timeout: idleTimeout });
+              } catch {
+                // اگر در این مدت networkidle نشد، ادامه می‌دهیم
+              }
+
+              // بررسی تغییر ارتفاع صفحه
+              const currentHeight = await page.evaluate(() => document.body.scrollHeight);
+              if (currentHeight === previousHeight) {
+                noChangeCount++;
+                if (noChangeCount >= noChangeThreshold) break;
+              } else {
+                noChangeCount = 0;
+                previousHeight = currentHeight;
+              }
+            }
+
+            // برگشت به بالای صفحه و تأخیر نهایی
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.waitForTimeout(finalWait);
           }
 
           // ─── Link collection ─────────────────────────────────────
@@ -626,8 +642,7 @@ jobs:
               }
 
               // ─── Scroll + wait ───────────────────────────────
-              await autoScroll(page);
-              await sleep(waitMs);
+              await smartScroll(page);
 
               // ─── Link collection ─────────────────────────────
               const rawLinks = await collectLinks(page);

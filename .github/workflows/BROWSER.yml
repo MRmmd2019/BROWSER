@@ -465,41 +465,87 @@ jobs:
             });
           }
 
-          // ─── Smart scroll: scrolls step-by-step, waits for images to load ──
-          async function smartScroll(page) {
-            const scrollStep = 500;
-            const maxSteps = 200;
-            const idleTimeout = 60000;
-            const finalWait = 60000;
-            const noChangeThreshold = 10;
+          // ─── Ultimate Page Loader — ترکیب سه روش برای بارگذاری کامل و سریع ──
+          async function ultimatePageLoad(page) {
+            const maxSteps = 150;             // حداکثر تعداد گام‌های اسکرول
+            const networkIdleTimeout = 10000; // ۱۰ ثانیه انتظار برای آرام‌شدن شبکه در هر گام
+            const checkInterval = 1500;       // فاصله بررسی تعداد تصاویر (میلی‌ثانیه)
+            const noChangeThreshold = 4;      // توقف پس از ۴ بار عدم تغییر در تعداد تصاویر
+            const finalWait = 5000;           // ۵ ثانیه تأخیر نهایی
 
-            let previousHeight = 0;
+            // ─── ۱. فعال‌سازی اجباری تمام تصاویر تنبل (Lazy Images) ───
+            await page.evaluate(() => {
+              const forceLoad = (img) => {
+                if (img.dataset.src)      { img.src = img.dataset.src;         img.removeAttribute('data-src'); }
+                if (img.dataset.lazySrc)  { img.src = img.dataset.lazySrc;     img.removeAttribute('data-lazy-src'); }
+                if (img.dataset.original) { img.src = img.dataset.original;    img.removeAttribute('data-original'); }
+                if (img.loading === 'lazy') img.loading = 'eager';
+              };
+
+              // فعال‌سازی تمام imgها با ویژگی‌های data-...
+              document.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original], img[loading="lazy"]').forEach(forceLoad);
+
+              // فعال‌سازی sourceها درون picture/video
+              document.querySelectorAll('source[data-src], source[data-srcset]').forEach(source => {
+                if (source.dataset.src)    { source.src    = source.dataset.src;    source.removeAttribute('data-src'); }
+                if (source.dataset.srcset) { source.srcset = source.dataset.srcset; source.removeAttribute('data-srcset'); }
+              });
+            });
+
+            // ─── ۲. پیمایش هوشمند صفحه (Smart Scroll) ───
+            // تابع کمکی برای دریافت تعداد تصاویر بارگذاری‌شده
+            async function countLoadedImages() {
+              return await page.evaluate(() =>
+                Array.from(document.querySelectorAll('img')).filter(img => img.complete && img.naturalWidth > 0).length
+              );
+            }
+
             let noChangeCount = 0;
+            let lastLoadedCount = await countLoadedImages();
 
             for (let step = 0; step < maxSteps; step++) {
-              await page.evaluate((dy) => window.scrollBy(0, dy), scrollStep);
+              // اسکرول به پایین صفحه (هم پنجره اصلی، هم سکشن‌های داخلی)
+              await page.evaluate(() => {
+                const dy = 500;
+                window.scrollBy(0, dy);
+                // تلاش برای اسکرول کردن هر عنصر قابل اسکرول داخلی
+                document.querySelectorAll('*').forEach(el => {
+                  const style = window.getComputedStyle(el);
+                  if (style.overflowY === 'scroll' || style.overflowY === 'auto') {
+                    el.scrollBy(0, dy);
+                  }
+                });
+              });
 
-              // منتظر آرام‌شدن شبکه (تصاویر در حال بارگذاری)
+              // انتظار برای آرام‌شدن شبکه (بارگذاری تصاویر)
               try {
-                await page.waitForLoadState('networkidle', { timeout: idleTimeout });
+                await page.waitForLoadState('networkidle', { timeout: networkIdleTimeout });
               } catch {
-                // اگر در این مدت networkidle نشد، ادامه می‌دهیم
+                // اگر در این مدت شبکه آرام نشد، اشکالی ندارد
               }
 
-              // بررسی تغییر ارتفاع صفحه
-              const currentHeight = await page.evaluate(() => document.body.scrollHeight);
-              if (currentHeight === previousHeight) {
-                noChangeCount++;
-                if (noChangeCount >= noChangeThreshold) break;
-              } else {
+              // بررسی نتیجه
+              const currentLoaded = await countLoadedImages();
+              console.log(`[Ultimate] Step ${step+1}: ${lastLoadedCount} → ${currentLoaded} images loaded`);
+
+              if (currentLoaded > lastLoadedCount) {
                 noChangeCount = 0;
-                previousHeight = currentHeight;
+                lastLoadedCount = currentLoaded;
+              } else {
+                noChangeCount++;
+                if (noChangeCount >= noChangeThreshold) {
+                  console.log('[Ultimate] ✅ Page fully loaded.');
+                  break;
+                }
               }
             }
 
-            // برگشت به بالای صفحه و تأخیر نهایی
+            // ─── ۳. بازگشت به بالا و تأخیر نهایی ───
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.waitForTimeout(finalWait);
+  
+            const finalCount = await countLoadedImages();
+            console.log(`[Ultimate] Final image count: ${finalCount}`);
           }
 
           // ─── Link collection ─────────────────────────────────────
@@ -642,8 +688,8 @@ jobs:
               }
 
               // ─── Scroll + wait ───────────────────────────────
-              await smartScroll(page);
-
+              await ultimatePageLoad(page);
+              
               // ─── Link collection ─────────────────────────────
               const rawLinks = await collectLinks(page);
               const categorized = categorizeLinks(rawLinks, MAIN_DOMAIN);

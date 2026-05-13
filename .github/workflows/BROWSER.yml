@@ -467,11 +467,11 @@ jobs:
 
           // ─── Smart scroll: scrolls step-by-step, waits for images to load ──
           async function smartScroll(page) {
-            const scrollStep = 600;
-            const maxSteps = 120;
-            const idleTimeout = 15000;
-            const finalWait = 8000;
-            const noChangeThreshold = 4;
+            const scrollStep = 500;
+            const maxSteps = 200;
+            const idleTimeout = 600000;
+            const finalWait = 600000;
+            const noChangeThreshold = 10;
 
             let previousHeight = 0;
             let noChangeCount = 0;

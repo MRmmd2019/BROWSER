@@ -469,8 +469,8 @@ jobs:
           async function smartScroll(page) {
             const scrollStep = 500;
             const maxSteps = 200;
-            const idleTimeout = 600000;
-            const finalWait = 600000;
+            const idleTimeout = 60000;
+            const finalWait = 60000;
             const noChangeThreshold = 10;
 
             let previousHeight = 0;

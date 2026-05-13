@@ -1,0 +1,15 @@
+
+				window.__NA.renderSpot({
+					spot_id: 228796,
+					type: 'Url',
+					creature_view: '5671631398220176129',
+					creative_id: 475890,
+					adv_creative_id: 0,
+					uuid: 'Erh1VipRh3axZgSz0E3t',
+					refresh_rate: 3600,
+					shows_limit: 1,
+					config: {"behavior":"none","bindTo":"","delay":0,"dimensions":{"top":0,"left":0,"width":"66.66%","height":"66.66%","position":"bottom_left"},"exposeCreativeId":false,"hideAsgtbndr":false,"ignoreTo":"","multiple":[],"newTab":"true","noLoop":"false","openTargetBlank":"false","popTypes":[],"refreshRate":null,"skipClicks":0,"triggerFirst":false,"under":"true"},
+					subid1: '',
+					subid2: '',
+					signature: ''
+				});

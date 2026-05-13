@@ -1,0 +1,18 @@
+
+			window.__NA.renderSpot({
+				spot_id: 230485,
+				type: 'Interstitial',
+				creature_view: '14240713595175431129',
+				creative_id: 1000742,
+				adv_creative_id: 0,
+				uuid: 'iwQlJqIBwKGimT3n6Twz',
+				refresh_rate: 300,
+				shows_limit: 1,
+				refcode: 81540,
+				monetiseUrl: 'https://www.adspyglass.net/?u=81540&utm_source=user-website&utm_medium=pre-land&utm_campaign=interstitial&utm_term=230485&utm_content=button',
+				advertiseUrl: 'https://trafokit.com/allporncomic.com?utm_adgroup_id=230485&utm_campaign=mediakit&utm_campaign_id=71&utm_content=button&utm_medium=referral&utm_placement=interstitial&utm_publisher_id=22525&utm_source=user_website&utm_term=new_audience',
+				config: {"behavior":"interstitial","bindTo":"a","ignoreTo":"","interstitialCloseBtnSmallText":"Close AD","interstitialCloseBtnText":"Close AD","interstitialCountdown":20,"interstitialDelay":0,"interstitialResponseTimeout":5,"interstitialTitle":"Continue to","preload":true,"skipClicks":0,"triggerFirst":true,"waitFor":"click"},
+				subid1: '',
+				subid2: '',
+				signature: ''
+		});

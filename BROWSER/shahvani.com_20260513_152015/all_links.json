@@ -1,0 +1,44 @@
+{
+  "summary": {
+    "total": 0,
+    "internal_pages": 0,
+    "internal_assets": 0,
+    "external_total": 0,
+    "apis": 0,
+    "feeds": 0,
+    "special_links": 0
+  },
+  "internal": {
+    "pages": [],
+    "css": [],
+    "js": [],
+    "images": [],
+    "fonts": [],
+    "media": [],
+    "documents": [],
+    "data": [],
+    "feeds": [],
+    "archives": [],
+    "other": []
+  },
+  "external": {
+    "cdn": [],
+    "fonts": [],
+    "analytics": [],
+    "social": [],
+    "ads": [],
+    "pages": [],
+    "other": []
+  },
+  "apis": [],
+  "special": {
+    "mailto": [],
+    "tel": [],
+    "data_urls": [],
+    "blob": [],
+    "javascript": [],
+    "anchor": []
+  },
+  "feeds": [],
+  "uncategorized": []
+}

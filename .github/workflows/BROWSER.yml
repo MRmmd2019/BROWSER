@@ -1,6 +1,7 @@
 # ============================================================
-#  🧩 Browser Extractor Pro — v4.0
+#  🧩 Browser Extractor Pro — v3.0
 #  نویسنده: MR.MMD2019
+#  آخرین بروزرسانی: 2025
 # ============================================================
 
 name: 🧩 Browser Extractor Pro
@@ -12,6 +13,7 @@ name: 🧩 Browser Extractor Pro
         description: '🌐 آدرس صفحه برای استخراج (URL کامل با https://)'
         required: true
         type: string
+
       output_type:
         description: '📁 نوع خروجی نهایی'
         required: true
@@ -21,34 +23,42 @@ name: 🧩 Browser Extractor Pro
           - zip_only
           - zip_and_folder
           - folder_only
+
       enable_split:
         description: '✂️ فعال‌سازی تقسیم فایل ZIP به تکه‌های کوچک‌تر'
         type: boolean
         default: false
+
       split_parts:
         description: '🔢 تعداد تکه‌ها (فقط اگر enable_split فعال باشد)'
         type: number
         default: 1
+
       max_part_size_mb:
         description: '📦 حداکثر حجم هر تکه به MB (خالی = تقسیم بر اساس تعداد)'
         type: string
         default: ''
+
       compression_level:
         description: '🗜️ سطح فشرده‌سازی ZIP (۱=سریع تا ۹=حداکثر فشرده)'
         type: number
         default: 6
+
       zip_password:
         description: '🔐 رمز عبور فایل ZIP (اختیاری — خالی = بدون رمز)'
         type: string
         default: ''
+
       screenshot_retries:
         description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۵)'
         type: number
         default: 3
+
       pdf_retries:
         description: '📄 تعداد تلاش مجدد برای PDF (۱-۵)'
         type: number
         default: 3
+
       pdf_text_align:
         description: '📐 جهت متن در PDF'
         type: choice
@@ -57,6 +67,7 @@ name: 🧩 Browser Extractor Pro
           - rtl
           - ltr
           - center
+
       wait_extra_ms:
         description: '⏱️ زمان انتظار اضافی پس از لود صفحه به میلی‌ثانیه (پیش‌فرض ۵۰۰۰)'
         type: number
@@ -81,38 +92,50 @@ jobs:
 
       # ── ۲. Validate inputs ─────────────────────────────────
       - name: "✅ Validate inputs"
+        env:
+          URL_INPUT: "${{ github.event.inputs.url }}"
+          CL_INPUT: "${{ github.event.inputs.compression_level }}"
+          SR_INPUT: "${{ github.event.inputs.screenshot_retries }}"
+          PR_INPUT: "${{ github.event.inputs.pdf_retries }}"
+          WAIT_INPUT: "${{ github.event.inputs.wait_extra_ms }}"
         run: |
           set -euo pipefail
-          URL="${{ github.event.inputs.url }}"
+
+          URL="$URL_INPUT"
           if [[ ! "$URL" =~ ^https?:// ]]; then
             echo "❌ ERROR: URL must start with http:// or https://"
             exit 1
           fi
-          CL="${{ github.event.inputs.compression_level }}"
+
+          CL="$CL_INPUT"
           if ! [[ "$CL" =~ ^[1-9]$ ]]; then
             echo "⚠️ WARNING: compression_level '$CL' is invalid, resetting to 6"
             echo "COMPRESSION_LEVEL=6" >> $GITHUB_ENV
           else
             echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV
           fi
-          SR="${{ github.event.inputs.screenshot_retries }}"
+
+          SR="$SR_INPUT"
           if ! [[ "$SR" =~ ^[1-5]$ ]]; then
             echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV
           else
             echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV
           fi
-          PR="${{ github.event.inputs.pdf_retries }}"
+
+          PR="$PR_INPUT"
           if ! [[ "$PR" =~ ^[1-5]$ ]]; then
             echo "PDF_RETRIES=3" >> $GITHUB_ENV
           else
             echo "PDF_RETRIES=$PR" >> $GITHUB_ENV
           fi
-          WAIT="${{ github.event.inputs.wait_extra_ms }}"
+
+          WAIT="$WAIT_INPUT"
           if ! [[ "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then
             echo "WAIT_MS=5000" >> $GITHUB_ENV
           else
             echo "WAIT_MS=$WAIT" >> $GITHUB_ENV
           fi
+
           echo "✅ All inputs validated."
 
       # ── ۳. System dependencies ─────────────────────────────
@@ -130,6 +153,8 @@ jobs:
           set -euo pipefail
           npm init -y --quiet
           npm install playwright@latest --save-exact --quiet
+
+          # نصب Chromium با fallback به Firefox
           if npx playwright install --with-deps chromium 2>/dev/null; then
             echo "BROWSER_TYPE=chromium" >> $GITHUB_ENV
             echo "✅ Chromium installed."
@@ -144,6 +169,7 @@ jobs:
       - name: "📦 Setup Monolith"
         run: |
           set -uo pipefail
+
           install_monolith_binary() {
             echo "⬇️ Attempting binary download..."
             DOWNLOAD_URL=$(curl -fsSL \
@@ -152,10 +178,13 @@ jobs:
               "https://api.github.com/repos/Y2Z/monolith/releases/latest" \
               | jq -r '.assets[] | select(.name | test("x86_64-unknown-linux")) | .browser_download_url' \
               | head -1)
+
             if [ -n "$DOWNLOAD_URL" ]; then
               aria2c -x 4 -s 4 --retry-wait=3 --max-tries=3 \
                 -H "User-Agent: GitHub-Actions-Bot/3.0" \
                 "$DOWNLOAD_URL" -o monolith_dl 2>/dev/null
+
+              # تشخیص نوع فایل
               if file monolith_dl | grep -q "gzip\|tar"; then
                 tar xzf monolith_dl
               elif file monolith_dl | grep -q "ELF"; then
@@ -163,12 +192,14 @@ jobs:
               else
                 tar xzf monolith_dl 2>/dev/null || mv monolith_dl monolith
               fi
+
               chmod +x monolith
               sudo mv monolith /usr/local/bin/
               return 0
             fi
             return 1
           }
+
           install_monolith_cargo() {
             echo "🔨 Building from source with Cargo..."
             if command -v cargo &>/dev/null || (sudo apt-get install -y cargo 2>/dev/null); then
@@ -176,6 +207,8 @@ jobs:
             fi
             return 1
           }
+
+          # سه fallback برای نصب
           if monolith --version &>/dev/null; then
             echo "✅ Monolith already available."
           elif install_monolith_binary; then
@@ -186,6 +219,7 @@ jobs:
             echo "⚠️ WARNING: Monolith unavailable. Will use wget fallback for monolithic HTML."
             echo "MONOLITH_AVAILABLE=false" >> $GITHUB_ENV
           fi
+
           if monolith --version &>/dev/null; then
             echo "MONOLITH_AVAILABLE=true" >> $GITHUB_ENV
             monolith --version
@@ -195,30 +229,40 @@ jobs:
       - name: "📁 Prepare output directory"
         run: |
           set -euo pipefail
+
           URL="${{ github.event.inputs.url }}"
+
+          # استخراج دامنه با پاک‌سازی www
           DOMAIN=$(echo "$URL" | awk -F'/' '{print $3}' | sed 's/^www\.//' | sed 's/:.*//')
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           FOLDER_NAME="${DOMAIN}_${TIMESTAMP}"
           OUT_DIR="BROWSER/${FOLDER_NAME}"
+
           mkdir -p "$OUT_DIR/assets"
+
+          # ذخیره URL پاک (بدون query string) برای monolith
           CLEAN_URL=$(echo "$URL" | sed 's/\?.*//' | sed 's/#.*//')
+
           echo "OUT_DIR=$OUT_DIR"             >> $GITHUB_ENV
           echo "FOLDER_NAME=$FOLDER_NAME"     >> $GITHUB_ENV
           echo "DOMAIN=$DOMAIN"               >> $GITHUB_ENV
           echo "URL=$URL"                     >> $GITHUB_ENV
           echo "CLEAN_URL=$CLEAN_URL"         >> $GITHUB_ENV
           echo "TIMESTAMP=$TIMESTAMP"         >> $GITHUB_ENV
+
           echo "✅ Output directory: $OUT_DIR"
 
       # ── ۷. Extract page with Playwright ───────────────────
       - name: "🎭 Extract page with Playwright"
         run: |
           set -uo pipefail
+
           cat > extract.js << 'PLAYWRIGHT_SCRIPT'
           'use strict';
           const { chromium, firefox } = require('playwright');
           const fs = require('fs');
           const path = require('path');
+
           const url          = process.argv[2];
           const outDir       = process.argv[3];
           const browserType  = process.argv[4] || 'chromium';
@@ -226,9 +270,12 @@ jobs:
           const pdfRetries   = Math.min(Math.max(parseInt(process.argv[6] || '3'), 1), 5);
           const pdfAlign     = process.argv[7] || 'rtl';
           const waitMs       = Math.min(parseInt(process.argv[8] || '5000'), 30000);
+
+          // ─── Headers & User-Agent ──────────────────────────────────
           const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
             'AppleWebKit/537.36 (KHTML, like Gecko) ' +
             'Chrome/124.0.0.0 Safari/537.36';
+
           const EXTRA_HEADERS = {
             'Accept':                    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language':           'en-US,en;q=0.9,fa;q=0.8',
@@ -245,7 +292,10 @@ jobs:
             'Upgrade-Insecure-Requests': '1',
             'DNT':                       '1',
           };
+
           const MAIN_DOMAIN = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
+
+          // ─── Utility: sanitize file path ──────────────────────────
           function sanitizePath(urlPath) {
             let p = '';
             try { p = decodeURIComponent(urlPath); } catch { p = urlPath; }
@@ -253,7 +303,11 @@ jobs:
             if (p.endsWith('/') || p === '') p += 'index.html';
             return p;
           }
+
+          // ─── Utility: sleep ───────────────────────────────────────
           const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+          // ─── Link categorization ──────────────────────────────────
           function categorizeLinks(links, mainDomain) {
             const EXT_MAP = {
               css: 'css', js: 'js',
@@ -273,6 +327,7 @@ jobs:
             const KNOWN_SOCIAL    = ['facebook.com','twitter.com','instagram.com','linkedin.com','youtube.com','tiktok.com','t.co','x.com','pinterest.com','snapchat.com','reddit.com'];
             const KNOWN_CDN       = ['cdn.','static.','assets.','media.','img.','images.','js.','css.','files.'];
             const KNOWN_AD        = ['doubleclick.net','googlesyndication.com','adservice.google','adnxs.com','moatads.com','criteo.com','taboola.com','outbrain.com'];
+
             const out = {
               summary: { total: links.length },
               internal: { pages: [], css: [], js: [], images: [], fonts: [], media: [], documents: [], data: [], feeds: [], archives: [], other: [] },
@@ -282,28 +337,38 @@ jobs:
               feeds: [],
               uncategorized: [],
             };
+
             for (const link of links) {
               if (!link || typeof link !== 'string' || link.trim() === '') continue;
               const l = link.trim();
+
+              // پروتکل‌های خاص
               if (l.startsWith('mailto:'))     { out.special.mailto.push(l);     continue; }
               if (l.startsWith('tel:'))        { out.special.tel.push(l);        continue; }
               if (l.startsWith('data:'))       { out.special.data_urls.push(l);  continue; }
               if (l.startsWith('blob:'))       { out.special.blob.push(l);       continue; }
               if (l.startsWith('javascript:')) { out.special.javascript.push(l); continue; }
               if (l.startsWith('#'))           { out.special.anchor.push(l);     continue; }
+
               let parsed;
               try { parsed = new URL(l); } catch { out.uncategorized.push(l); continue; }
+
               const hostname = parsed.hostname;
               const pathname = parsed.pathname;
               const extRaw   = pathname.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
               const ext      = EXT_MAP[extRaw];
               const isInt    = mainDomain && (hostname === mainDomain || hostname.endsWith('.' + mainDomain));
+
+              // feeds
               if (ext === 'feeds' || pathname.includes('/feed') || pathname.includes('/rss')) {
                 out.feeds.push(l); continue;
               }
+
+              // API endpoints
               if (/\/(api|graphql|rest|v\d+|gql)\//i.test(pathname) || parsed.searchParams.has('api_key')) {
                 out.apis.push(l); continue;
               }
+
               if (isInt) {
                 const bucket = out.internal[ext] || out.internal.other;
                 if (Array.isArray(bucket)) bucket.push(l);
@@ -317,6 +382,8 @@ jobs:
                 else { out.external.pages.push(l); }
               }
             }
+
+            // خلاصه
             out.summary.internal_pages  = out.internal.pages.length;
             out.summary.internal_assets = Object.values(out.internal).flat().length - out.internal.pages.length;
             out.summary.external_total  = Object.values(out.external).flat().length;
@@ -325,6 +392,8 @@ jobs:
             out.summary.special_links   = Object.values(out.special).flat().length;
             return out;
           }
+
+          // ─── PDF: خواندن صحیح stream به صورت chunk‌ها ────────────
           async function readPdfStream(session, stream) {
             const chunks = [];
             let eof = false;
@@ -338,6 +407,8 @@ jobs:
             await session.send('IO.close', { handle: stream }).catch(() => {});
             return Buffer.concat(chunks);
           }
+
+          // ─── Page navigation با چند fallback ─────────────────────
           async function navigateWithFallback(page, targetUrl) {
             const strategies = [
               { waitUntil: 'networkidle', timeout: 90000 },
@@ -345,6 +416,7 @@ jobs:
               { waitUntil: 'load', timeout: 45000 },
               { waitUntil: 'commit', timeout: 30000 },
             ];
+
             for (let i = 0; i < strategies.length; i++) {
               try {
                 console.log(`[Nav] Strategy ${i + 1}/${strategies.length}: waitUntil=${strategies[i].waitUntil}`);
@@ -359,6 +431,8 @@ jobs:
             console.error('[Nav] ❌ All navigation strategies failed.');
             return false;
           }
+
+          // ─── Asset interceptor ────────────────────────────────────
           function setupAssetCapture(page, outDir, mainDomain) {
             const captured = new Set();
             page.on('response', async (response) => {
@@ -366,9 +440,11 @@ jobs:
                 if (response.status() < 200 || response.status() >= 400) return;
                 const respUrl = (() => { try { return new URL(response.url()); } catch { return null; } })();
                 if (!respUrl) return;
+
                 const isInternal = respUrl.hostname === mainDomain ||
                                    respUrl.hostname.endsWith('.' + mainDomain);
                 if (!isInternal) return;
+
                 const ct = (response.headers()['content-type'] || '').toLowerCase();
                 const isAsset =
                   ct.includes('text/css') ||
@@ -379,11 +455,14 @@ jobs:
                   ct.includes('application/xml') ||
                   ct.includes('audio/') ||
                   ct.includes('video/');
+
                 if (!isAsset) return;
                 if (captured.has(response.url())) return;
                 captured.add(response.url());
+
                 const buffer = await response.body();
                 if (!buffer || buffer.length === 0) return;
+
                 const cleanPath = sanitizePath(respUrl.pathname);
                 const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
                 fs.mkdirSync(path.dirname(assetPath), { recursive: true });
@@ -392,69 +471,95 @@ jobs:
             });
           }
           async function ultimatePageLoad(page) {
-            const maxScrollSteps = 200;
-            const scrollDistance = 500;
-            const idleWait = 1500;
-            const networkIdleTimeout = 5000;
-            const noChangeLimit = 5;
-            const finalWait = 3000;
+            const maxSteps = 100;
+            const networkIdleTimeout = 10000;
+            const idleWait = 30000;
+            const noChangeThreshold = 10;
+            const finalWait = 100000;
             await page.evaluate(() => {
-              // فعال‌سازی اجباری همه تصاویر تنبل
+              const origSetAttribute = Element.prototype.setAttribute;
+              Element.prototype.setAttribute = function (name, value) {
+                if (this.tagName === 'IMG' && name === 'loading' && value === 'lazy') {
+                  this.loading = 'eager';
+                  return;
+                }
+                return origSetAttribute.call(this, name, value);
+              };
+              document.querySelectorAll('img[loading="lazy"]').forEach(img => img.loading = 'eager');
+              if (typeof IntersectionObserver !== 'undefined') {
+                const OrigObserve = IntersectionObserver.prototype.observe;
+                IntersectionObserver.prototype.observe = function (target) {
+                  try {
+                    const entry = { target, isIntersecting: true, intersectionRatio: 1 };
+                    if (this.callback) this.callback([entry], this);
+                    if (this.unobserve) this.unobserve(target);
+                  } catch (e) {}
+                };
+                IntersectionObserver.prototype.unobserve = function () {};
+                IntersectionObserver.prototype.disconnect = function () {};
+              }
+              if (typeof window.requestIdleCallback !== 'undefined') {
+                window.requestIdleCallback = function(cb) { return setTimeout(cb, 0); };
+                window.cancelIdleCallback = function(id) { clearTimeout(id); };
+              }
               const forceLoad = (img) => {
                 if (img.dataset.src)      { img.src = img.dataset.src;         img.removeAttribute('data-src'); }
                 if (img.dataset.lazySrc)  { img.src = img.dataset.lazySrc;     img.removeAttribute('data-lazy-src'); }
                 if (img.dataset.original) { img.src = img.dataset.original;    img.removeAttribute('data-original'); }
                 if (img.loading === 'lazy') img.loading = 'eager';
+                if (img.srcset) {
+                }
               };
-              document.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original], img[loading="lazy"]').forEach(forceLoad);
-              document.querySelectorAll('source[data-src], source[data-srcset]').forEach(source => {
-                if (source.dataset.src)    { source.src    = source.dataset.src;    source.removeAttribute('data-src'); }
-                if (source.dataset.srcset) { source.srcset = source.dataset.srcset; source.removeAttribute('data-srcset'); }
-              });
-              window.__imagesAdded = 0;
-              const observer = new MutationObserver((mutations) => {
-                mutations.forEach(mutation => {
-                  mutation.addedNodes.forEach(node => {
-                    if (node.nodeName === 'IMG') {
-                      forceLoad(node);
-                      window.__imagesAdded++;
-                    } else if (node.querySelectorAll) {
-                      node.querySelectorAll('img').forEach(forceLoad);
-                      window.__imagesAdded++;
-                    }
+              const processNode = (node) => {
+                if (node.nodeName === 'IMG') forceLoad(node);
+                if (node.querySelectorAll) {
+                  node.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original], img[loading="lazy"]').forEach(forceLoad);
+                  node.querySelectorAll('source[data-src], source[data-srcset]').forEach(source => {
+                    if (source.dataset.src)    { source.src    = source.dataset.src;    source.removeAttribute('data-src'); }
+                    if (source.dataset.srcset) { source.srcset = source.dataset.srcset; source.removeAttribute('data-srcset'); }
                   });
+                }
+                if (node.shadowRoot) processNode(node.shadowRoot);
+              };
+              processNode(document.body);
+              window.__imgForceLoad = forceLoad;
+              const observer = new MutationObserver((mutations) => {
+                mutations.forEach(mut => {
+                  mut.addedNodes.forEach(node => processNode(node));
                 });
               });
               observer.observe(document.body, { childList: true, subtree: true });
             });
-            const countLoadedImages = () => page.evaluate(() =>
-              Array.from(document.querySelectorAll('img')).filter(img => img.complete && img.naturalWidth > 0).length
-            );
+            async function countLoadedImages() {
+              return await page.evaluate(() =>
+                Array.from(document.querySelectorAll('img')).filter(img => img.complete && img.naturalWidth > 0).length
+              );
+            }
             let noChangeCount = 0;
             let lastLoadedCount = await countLoadedImages();
-            let step = 0;
-            while (step < maxScrollSteps) {
+            for (let step = 0; step < maxSteps; step++) {
               await page.evaluate((dy) => {
                 window.scrollBy(0, dy);
                 document.querySelectorAll('*').forEach(el => {
                   const style = window.getComputedStyle(el);
-                  if (style.overflowY === 'scroll' || style.overflowY === 'auto') el.scrollBy(0, dy);
+                  if (style.overflowY === 'scroll' || style.overflowY === 'auto') {
+                    el.scrollBy(0, dy);
+                  }
                 });
-              }, scrollDistance);
+              }, 500);
               await page.waitForTimeout(idleWait);
               try {
                 await page.waitForLoadState('networkidle', { timeout: networkIdleTimeout });
-              } catch { /* مهم نیست */ }
+              } catch {}
               const currentLoaded = await countLoadedImages();
-              step++;
-              console.log(`[Ultimate] Step ${step}: ${lastLoadedCount} → ${currentLoaded} images`);
+              console.log(`[Ultimate] Step ${step + 1}: ${lastLoadedCount} → ${currentLoaded} images loaded`);
               if (currentLoaded > lastLoadedCount) {
                 noChangeCount = 0;
                 lastLoadedCount = currentLoaded;
               } else {
                 noChangeCount++;
-                if (noChangeCount >= noChangeLimit) {
-                  console.log('[Ultimate] ✅ No new images – page fully loaded.');
+                if (noChangeCount >= noChangeThreshold) {
+                  console.log('[Ultimate] ✅ Page fully loaded.');
                   break;
                 }
               }
@@ -485,7 +590,6 @@ jobs:
           }
           async function takeScreenshot(page, outPath, retries) {
             for (let i = 0; i < retries; i++) {
-              // fullPage
               try {
                 await page.screenshot({ path: outPath, fullPage: true, timeout: 90000, type: 'png' });
                 console.log(`[Screenshot] ✅ Full-page screenshot on attempt ${i + 1}`);
@@ -493,7 +597,6 @@ jobs:
               } catch (e) {
                 console.log(`[Screenshot] ⚠️ Full-page attempt ${i + 1} failed: ${e.message.split('\n')[0]}`);
               }
-              // viewport only
               try {
                 await page.screenshot({ path: outPath, fullPage: false, timeout: 30000, type: 'png' });
                 console.log(`[Screenshot] ✅ Viewport screenshot on attempt ${i + 1} (fallback)`);
@@ -524,6 +627,7 @@ jobs:
               } catch (e) {
                 console.log(`[PDF] ⚠️ CDP attempt ${i + 1} failed: ${e.message.split('\n')[0]}`);
               }
+              // روش ۲: Playwright built-in pdf()
               try {
                 await page.pdf({ path: outPath, format: 'A4', printBackground: true, timeout: 120000 });
                 console.log(`[PDF] ✅ Playwright pdf() on attempt ${i + 1}`);
@@ -635,8 +739,10 @@ jobs:
       - name: "🧱 Create monolithic HTML (Monolith)"
         run: |
           set -uo pipefail
+
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
           OUTPUT="$OUT_DIR/page_monolith.html"
+
           run_monolith() {
             local target_url="$1"
             monolith "$target_url" \
@@ -645,11 +751,15 @@ jobs:
               --no-video \
               -o "$OUTPUT" 2>&1
           }
+
           if [ "${MONOLITH_AVAILABLE:-true}" = "true" ]; then
+            # fallback ۱: URL پاک
             if run_monolith "$CLEAN_URL"; then
               echo "✅ Monolith OK with clean URL."
+            # fallback ۲: URL اصلی
             elif run_monolith "$URL"; then
               echo "✅ Monolith OK with original URL."
+            # fallback ۳: curl با هدرهای کامل
             else
               echo "⚠️ Monolith failed. Falling back to curl..."
               curl -fsSL \
@@ -672,12 +782,14 @@ jobs:
               -O "$OUTPUT" "$URL" \
               || { echo "⚠️ wget fallback failed. Creating placeholder."; echo "<html><body><p>Monolith unavailable.</p></body></html>" > "$OUTPUT"; }
           fi
+
           ls -lh "$OUTPUT" 2>/dev/null || echo "⚠️ page_monolith.html not created."
 
       # ── ۹. Package & ZIP ──────────────────────────────────
       - name: "📦 Package output and create ZIP"
         run: |
           set -euo pipefail
+
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
           ZIP_PASSWORD="${{ github.event.inputs.zip_password }}"
           ENABLE_SPLIT="${{ github.event.inputs.enable_split }}"
@@ -685,18 +797,25 @@ jobs:
           MAX_PART_SIZE_MB="${{ github.event.inputs.max_part_size_mb }}"
           OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
           CL="${{ env.COMPRESSION_LEVEL }}"
+
           BACKUP_DIR="/tmp/backup_$$_${FOLDER_NAME}"
           mkdir -p "$BACKUP_DIR"
           echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
+
           cd BROWSER
+
           ZIP_BASE="${FOLDER_NAME}"
           ARCHIVE_PATH="${ZIP_BASE}.zip"
+
           TOTAL_SIZE=0
           if [ -d "$FOLDER_NAME" ]; then
             TOTAL_SIZE=$(du -sb "$FOLDER_NAME" 2>/dev/null | cut -f1 || echo "0")
           fi
+
+          # ─── محاسبه split size ────────────────────────────
           USE_SPLIT=false
           SPLIT_SIZE=100
+
           if [ "$ENABLE_SPLIT" = "true" ]; then
             if [ -n "$MAX_PART_SIZE_MB" ] && echo "$MAX_PART_SIZE_MB" | grep -qE '^[0-9]+$' && [ "$MAX_PART_SIZE_MB" -gt 0 ]; then
               SPLIT_SIZE="$MAX_PART_SIZE_MB"
@@ -708,16 +827,21 @@ jobs:
               echo "Split mode: ${SPLIT_PARTS} parts → ~${SPLIT_SIZE}MB each"
             fi
           fi
+
+          # ─── ایجاد ZIP ────────────────────────────────────
           if [ "$OUTPUT_TYPE" != "folder_only" ]; then
             build_zip() {
               local extra_args=()
               [ -n "$ZIP_PASSWORD" ] && extra_args+=(-P "$ZIP_PASSWORD")
               [ "$USE_SPLIT" = "true" ] && extra_args+=(-s "${SPLIT_SIZE}m")
+
+              # تلاش ۱: zip استاندارد
               if zip -r "-${CL}" "${extra_args[@]}" "$ARCHIVE_PATH" "$FOLDER_NAME"; then
                 echo "✅ ZIP created successfully."
                 return 0
               fi
               echo "⚠️ zip failed, trying p7zip..."
+
               # تلاش ۲: p7zip
               local p7_args=("-mx=${CL}")
               [ -n "$ZIP_PASSWORD" ] && p7_args+=("-p${ZIP_PASSWORD}")
@@ -728,8 +852,11 @@ jobs:
               echo "❌ All ZIP methods failed."
               return 1
             }
+
             build_zip || echo "⚠️ WARNING: ZIP creation failed — folder still available."
           fi
+
+          # ─── پاک کردن بر اساس output_type ───────────────
           if [ "$OUTPUT_TYPE" = "zip_only" ] && [ -f "$ARCHIVE_PATH" ]; then
             rm -rf "$FOLDER_NAME"
             echo "✅ Folder removed (zip_only mode)."
@@ -737,13 +864,29 @@ jobs:
             rm -f "${ZIP_BASE}.zip" "${ZIP_BASE}.z"[0-9]* 2>/dev/null || true
             echo "✅ ZIP files removed (folder_only mode)."
           fi
+
+          # ─── ذخیره backup ────────────────────────────────
           cp -r . "$BACKUP_DIR/"
           echo "✅ Backup saved to $BACKUP_DIR"
 
       # ── ۱۰. Generate READMEs & links.txt ─────────────────
       - name: "📝 Generate README and links.txt"
+        env:
+          FOLDER_NAME: "${{ env.FOLDER_NAME }}"
+          REPO_OWNER: "${{ github.repository_owner }}"
+          REPO_FULL: "${{ github.repository }}"
+          BRANCH: "${{ github.ref_name }}"
+          ZIP_PASSWORD: "${{ github.event.inputs.zip_password }}"
+          CL: "${{ env.COMPRESSION_LEVEL }}"
+          OUTPUT_TYPE: "${{ github.event.inputs.output_type }}"
+          URL: "${{ env.URL }}"
+          DOMAIN: "${{ env.DOMAIN }}"
+          TIMESTAMP: "${{ env.TIMESTAMP }}"
+          PDF_ALIGN: "${{ github.event.inputs.pdf_text_align }}"
+          WAIT_MS: ${{ env.WAIT_MS }}
         run: |
           set -euo pipefail
+
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
@@ -754,16 +897,20 @@ jobs:
           URL="${{ env.URL }}"
           DOMAIN="${{ env.DOMAIN }}"
           TIMESTAMP="${{ env.TIMESTAMP }}"
-          WAIT_MS="${{ env.WAIT_MS }}"
+
           cd BROWSER
+
           TARGET_DIR="."
           [ -d "$FOLDER_NAME" ] && TARGET_DIR="$FOLDER_NAME"
+
+          # ─── اطلاعات ZIP ─────────────────────────────────
           HAS_ZIP=false
           SHA256=""
           SIZE=""
           TOTAL_PARTS=0
           DOWNLOAD_LINKS_MD=""
           LINKS_TXT_CONTENT=""
+
           if compgen -G "${FOLDER_NAME}.zip" > /dev/null 2>&1; then
             HAS_ZIP=true
             SHA256=$(sha256sum "${FOLDER_NAME}.zip" | awk '{print $1}')
@@ -778,6 +925,8 @@ jobs:
               LINKS_TXT_CONTENT+="${raw_link}"$'\n'
             done
           fi
+
+          # ─── لینک‌های محتوا (folder mode) ───────────────
           FOLDER_LINKS_MD=""
           if [ -d "$FOLDER_NAME" ]; then
             for f in index.html screenshot.png page.pdf page_monolith.html all_links.json; do
@@ -788,6 +937,8 @@ jobs:
               fi
             done
           fi
+
+          # ─── links.txt ───────────────────────────────────
           {
             if [ -n "$LINKS_TXT_CONTENT" ]; then
               printf '%s' "$LINKS_TXT_CONTENT"
@@ -796,6 +947,8 @@ jobs:
               echo "# https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/BROWSER/${FOLDER_NAME}"
             fi
           } > "${TARGET_DIR}/links.txt"
+
+          # ─── README.md (English) ──────────────────────────
           {
             echo "# 🧩 ${FOLDER_NAME}"
             echo ""
@@ -812,7 +965,7 @@ jobs:
             echo "| **Captured At** | ${TIMESTAMP} (UTC) |"
             echo "| **Output Type** | \`${OUTPUT_TYPE}\` |"
             echo "| **Compression Level** | ${CL}/9 |"
-            echo "| **PDF Direction** | ${{ github.event.inputs.pdf_text_align }} |"
+            echo "| **PDF Direction** | ${PDF_ALIGN} |"
             echo "| **Password Protected** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ YES" || echo "❌ NO") |"
             if [ "$HAS_ZIP" = true ]; then
               echo "| **Total ZIP Size** | ${SIZE} (${TOTAL_PARTS} part(s)) |"
@@ -904,6 +1057,8 @@ jobs:
             echo ""
             echo "*Powered by [MR.MMD2019](https://github.com/MRmmd2019) · Browser Extractor Pro v3.0*"
           } > "${TARGET_DIR}/README.md"
+
+          # ─── README_FA.md (فارسی) ────────────────────────
           {
             echo "# 🧩 ${FOLDER_NAME}"
             echo ""
@@ -920,7 +1075,7 @@ jobs:
             echo "| **زمان آرشیو** | ${TIMESTAMP} (UTC) |"
             echo "| **نوع خروجی** | \`${OUTPUT_TYPE}\` |"
             echo "| **سطح فشرده‌سازی** | ${CL} از ۹ |"
-            echo "| **جهت PDF** | ${{ github.event.inputs.pdf_text_align }} |"
+            echo "| **جهت PDF** | ${PDF_ALIGN} |"
             echo "| **محافظت با رمز** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ بله" || echo "❌ خیر") |"
             if [ "$HAS_ZIP" = true ]; then
               echo "| **حجم کل ZIP** | ${SIZE} (${TOTAL_PARTS} بخش) |"
@@ -1012,18 +1167,24 @@ jobs:
             echo ""
             echo "*نیرو گرفته از [MR.MMD2019](https://github.com/MRmmd2019) · Browser Extractor Pro v3.0*"
           } > "${TARGET_DIR}/README_FA.md"
+
           echo "✅ README.md, README_FA.md, and links.txt generated."
 
       # ── ۱۱. Commit & Push ────────────────────────────────
       - name: "🚀 Commit and push all files"
         run: |
           set -uo pipefail
+
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           BRANCH="${{ github.ref_name }}"
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
+
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # ─── sync با remote ───────────────────────────────
           git fetch origin "$BRANCH" --quiet
+
           sync_with_remote() {
             local attempt=$1
             echo "🔄 Sync attempt ${attempt}/5..."
@@ -1036,17 +1197,27 @@ jobs:
               return 1
             fi
           }
+
           git reset --hard origin/"$BRANCH" --quiet
+
           mkdir -p BROWSER
+
+          # کپی backup به BROWSER
           if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
             cp -rf "$BACKUP_DIR"/. BROWSER/ 2>/dev/null || true
           fi
+
+          # ─── جمع‌آوری فایل‌ها ────────────────────────────
           mapfile -t ALL_FILES < <(find BROWSER -type f | sort)
+
           if [ "${#ALL_FILES[@]}" -eq 0 ]; then
             echo "⚠️ Nothing to push."
             exit 0
           fi
+
           echo "📦 Total files to commit: ${#ALL_FILES[@]}"
+
+          # ─── push با fallback ────────────────────────────
           do_push() {
             local retry=0
             while [ $retry -lt 5 ]; do
@@ -1062,9 +1233,12 @@ jobs:
             echo "❌ All push attempts failed."
             return 1
           }
+
+          # ─── commit در batch‌های ۵۰ فایلی ───────────────
           BATCH_SIZE=50
           batch=()
           batch_num=0
+
           commit_and_push_batch() {
             local -a files=("$@")
             for f in "${files[@]}"; do
@@ -1077,6 +1251,7 @@ jobs:
             git commit -m "🤖 [Bot] Archive: ${FOLDER_NAME} (batch ${batch_num}) [skip ci]" --quiet
             do_push || return 1
           }
+
           for f in "${ALL_FILES[@]}"; do
             batch+=("$f")
             if [ "${#batch[@]}" -ge "$BATCH_SIZE" ]; then
@@ -1085,29 +1260,38 @@ jobs:
               batch=()
             fi
           done
+
+          # آخرین batch
           if [ "${#batch[@]}" -gt 0 ]; then
             batch_num=$((batch_num + 1))
             commit_and_push_batch "${batch[@]}" || { echo "❌ Final batch push failed!"; exit 1; }
           fi
+
           echo "✅ All files committed and pushed successfully."
 
       # ── ۱۲. Summary ──────────────────────────────────────
       - name: "📊 Workflow Summary"
         if: always()
+        env:
+          URL: "${{ github.event.inputs.url }}"
+          OUTPUT_TYPE: "${{ github.event.inputs.output_type }}"
+          COMPRESSION: "${{ env.COMPRESSION_LEVEL }}"
+          BROWSER: "${{ env.BROWSER_TYPE }}"
+          FOLDER: "${{ env.FOLDER_NAME }}"
         run: |
           echo "## 🧩 Browser Extractor Pro — Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **URL** | \`${{ github.event.inputs.url }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Output type** | \`${{ github.event.inputs.output_type }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Compression** | ${{ env.COMPRESSION_LEVEL }}/9 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Browser** | ${{ env.BROWSER_TYPE }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Folder** | \`BROWSER/${{ env.FOLDER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | \`${URL}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Output type** | \`${OUTPUT_TYPE}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Compression** | ${COMPRESSION}/9 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Browser** | ${BROWSER} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Folder** | \`BROWSER/${FOLDER}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -d "BROWSER/${{ env.FOLDER_NAME }}" ]; then
-            FILE_COUNT=$(find "BROWSER/${{ env.FOLDER_NAME }}" -type f | wc -l)
-            FOLDER_SIZE=$(du -sh "BROWSER/${{ env.FOLDER_NAME }}" 2>/dev/null | cut -f1 || echo "?")
+          if [ -d "BROWSER/${FOLDER}" ]; then
+            FILE_COUNT=$(find "BROWSER/${FOLDER}" -type f | wc -l)
+            FOLDER_SIZE=$(du -sh "BROWSER/${FOLDER}" 2>/dev/null | cut -f1 || echo "?")
             echo "| **Files captured** | ${FILE_COUNT} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Folder size** | ${FOLDER_SIZE} |" >> $GITHUB_STEP_SUMMARY
           fi

@@ -1,7 +1,6 @@
 # ============================================================
-#  🧩 Browser Extractor Pro — v3.0
+#  🧩 Browser Extractor Pro — v4.0
 #  نویسنده: MR.MMD2019
-#  آخرین بروزرسانی: 2025
 # ============================================================
 
 name: 🧩 Browser Extractor Pro
@@ -13,7 +12,6 @@ name: 🧩 Browser Extractor Pro
         description: '🌐 آدرس صفحه برای استخراج (URL کامل با https://)'
         required: true
         type: string
-
       output_type:
         description: '📁 نوع خروجی نهایی'
         required: true
@@ -23,42 +21,34 @@ name: 🧩 Browser Extractor Pro
           - zip_only
           - zip_and_folder
           - folder_only
-
       enable_split:
         description: '✂️ فعال‌سازی تقسیم فایل ZIP به تکه‌های کوچک‌تر'
         type: boolean
         default: false
-
       split_parts:
         description: '🔢 تعداد تکه‌ها (فقط اگر enable_split فعال باشد)'
         type: number
         default: 1
-
       max_part_size_mb:
         description: '📦 حداکثر حجم هر تکه به MB (خالی = تقسیم بر اساس تعداد)'
         type: string
         default: ''
-
       compression_level:
         description: '🗜️ سطح فشرده‌سازی ZIP (۱=سریع تا ۹=حداکثر فشرده)'
         type: number
         default: 6
-
       zip_password:
         description: '🔐 رمز عبور فایل ZIP (اختیاری — خالی = بدون رمز)'
         type: string
         default: ''
-
       screenshot_retries:
         description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۵)'
         type: number
         default: 3
-
       pdf_retries:
         description: '📄 تعداد تلاش مجدد برای PDF (۱-۵)'
         type: number
         default: 3
-
       pdf_text_align:
         description: '📐 جهت متن در PDF'
         type: choice
@@ -67,7 +57,6 @@ name: 🧩 Browser Extractor Pro
           - rtl
           - ltr
           - center
-
       wait_extra_ms:
         description: '⏱️ زمان انتظار اضافی پس از لود صفحه به میلی‌ثانیه (پیش‌فرض ۵۰۰۰)'
         type: number
@@ -94,13 +83,11 @@ jobs:
       - name: "✅ Validate inputs"
         run: |
           set -euo pipefail
-
           URL="${{ github.event.inputs.url }}"
           if [[ ! "$URL" =~ ^https?:// ]]; then
             echo "❌ ERROR: URL must start with http:// or https://"
             exit 1
           fi
-
           CL="${{ github.event.inputs.compression_level }}"
           if ! [[ "$CL" =~ ^[1-9]$ ]]; then
             echo "⚠️ WARNING: compression_level '$CL' is invalid, resetting to 6"
@@ -108,28 +95,24 @@ jobs:
           else
             echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV
           fi
-
           SR="${{ github.event.inputs.screenshot_retries }}"
           if ! [[ "$SR" =~ ^[1-5]$ ]]; then
             echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV
           else
             echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV
           fi
-
           PR="${{ github.event.inputs.pdf_retries }}"
           if ! [[ "$PR" =~ ^[1-5]$ ]]; then
             echo "PDF_RETRIES=3" >> $GITHUB_ENV
           else
             echo "PDF_RETRIES=$PR" >> $GITHUB_ENV
           fi
-
           WAIT="${{ github.event.inputs.wait_extra_ms }}"
           if ! [[ "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then
             echo "WAIT_MS=5000" >> $GITHUB_ENV
           else
             echo "WAIT_MS=$WAIT" >> $GITHUB_ENV
           fi
-
           echo "✅ All inputs validated."
 
       # ── ۳. System dependencies ─────────────────────────────
@@ -147,8 +130,6 @@ jobs:
           set -euo pipefail
           npm init -y --quiet
           npm install playwright@latest --save-exact --quiet
-
-          # نصب Chromium با fallback به Firefox
           if npx playwright install --with-deps chromium 2>/dev/null; then
             echo "BROWSER_TYPE=chromium" >> $GITHUB_ENV
             echo "✅ Chromium installed."
@@ -163,7 +144,6 @@ jobs:
       - name: "📦 Setup Monolith"
         run: |
           set -uo pipefail
-
           install_monolith_binary() {
             echo "⬇️ Attempting binary download..."
             DOWNLOAD_URL=$(curl -fsSL \
@@ -172,13 +152,10 @@ jobs:
               "https://api.github.com/repos/Y2Z/monolith/releases/latest" \
               | jq -r '.assets[] | select(.name | test("x86_64-unknown-linux")) | .browser_download_url' \
               | head -1)
-
             if [ -n "$DOWNLOAD_URL" ]; then
               aria2c -x 4 -s 4 --retry-wait=3 --max-tries=3 \
                 -H "User-Agent: GitHub-Actions-Bot/3.0" \
                 "$DOWNLOAD_URL" -o monolith_dl 2>/dev/null
-
-              # تشخیص نوع فایل
               if file monolith_dl | grep -q "gzip\|tar"; then
                 tar xzf monolith_dl
               elif file monolith_dl | grep -q "ELF"; then
@@ -186,14 +163,12 @@ jobs:
               else
                 tar xzf monolith_dl 2>/dev/null || mv monolith_dl monolith
               fi
-
               chmod +x monolith
               sudo mv monolith /usr/local/bin/
               return 0
             fi
             return 1
           }
-
           install_monolith_cargo() {
             echo "🔨 Building from source with Cargo..."
             if command -v cargo &>/dev/null || (sudo apt-get install -y cargo 2>/dev/null); then
@@ -201,8 +176,6 @@ jobs:
             fi
             return 1
           }
-
-          # سه fallback برای نصب
           if monolith --version &>/dev/null; then
             echo "✅ Monolith already available."
           elif install_monolith_binary; then
@@ -213,7 +186,6 @@ jobs:
             echo "⚠️ WARNING: Monolith unavailable. Will use wget fallback for monolithic HTML."
             echo "MONOLITH_AVAILABLE=false" >> $GITHUB_ENV
           fi
-
           if monolith --version &>/dev/null; then
             echo "MONOLITH_AVAILABLE=true" >> $GITHUB_ENV
             monolith --version
@@ -223,27 +195,19 @@ jobs:
       - name: "📁 Prepare output directory"
         run: |
           set -euo pipefail
-
           URL="${{ github.event.inputs.url }}"
-
-          # استخراج دامنه با پاک‌سازی www
           DOMAIN=$(echo "$URL" | awk -F'/' '{print $3}' | sed 's/^www\.//' | sed 's/:.*//')
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           FOLDER_NAME="${DOMAIN}_${TIMESTAMP}"
           OUT_DIR="BROWSER/${FOLDER_NAME}"
-
           mkdir -p "$OUT_DIR/assets"
-
-          # ذخیره URL پاک (بدون query string) برای monolith
           CLEAN_URL=$(echo "$URL" | sed 's/\?.*//' | sed 's/#.*//')
-
           echo "OUT_DIR=$OUT_DIR"             >> $GITHUB_ENV
           echo "FOLDER_NAME=$FOLDER_NAME"     >> $GITHUB_ENV
           echo "DOMAIN=$DOMAIN"               >> $GITHUB_ENV
           echo "URL=$URL"                     >> $GITHUB_ENV
           echo "CLEAN_URL=$CLEAN_URL"         >> $GITHUB_ENV
           echo "TIMESTAMP=$TIMESTAMP"         >> $GITHUB_ENV
-
           echo "✅ Output directory: $OUT_DIR"
 
       # ── ۷. Extract page with Playwright ───────────────────
@@ -671,7 +635,6 @@ jobs:
       - name: "🧱 Create monolithic HTML (Monolith)"
         run: |
           set -uo pipefail
-
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
           OUTPUT="$OUT_DIR/page_monolith.html"
           run_monolith() {
@@ -683,13 +646,10 @@ jobs:
               -o "$OUTPUT" 2>&1
           }
           if [ "${MONOLITH_AVAILABLE:-true}" = "true" ]; then
-            # fallback ۱: URL پاک
             if run_monolith "$CLEAN_URL"; then
               echo "✅ Monolith OK with clean URL."
-            # fallback ۲: URL اصلی
             elif run_monolith "$URL"; then
               echo "✅ Monolith OK with original URL."
-            # fallback ۳: curl با هدرهای کامل
             else
               echo "⚠️ Monolith failed. Falling back to curl..."
               curl -fsSL \
@@ -735,8 +695,6 @@ jobs:
           if [ -d "$FOLDER_NAME" ]; then
             TOTAL_SIZE=$(du -sb "$FOLDER_NAME" 2>/dev/null | cut -f1 || echo "0")
           fi
-
-          # ─── محاسبه split size ────────────────────────────
           USE_SPLIT=false
           SPLIT_SIZE=100
           if [ "$ENABLE_SPLIT" = "true" ]; then
@@ -750,21 +708,16 @@ jobs:
               echo "Split mode: ${SPLIT_PARTS} parts → ~${SPLIT_SIZE}MB each"
             fi
           fi
-
-          # ─── ایجاد ZIP ────────────────────────────────────
           if [ "$OUTPUT_TYPE" != "folder_only" ]; then
             build_zip() {
               local extra_args=()
               [ -n "$ZIP_PASSWORD" ] && extra_args+=(-P "$ZIP_PASSWORD")
               [ "$USE_SPLIT" = "true" ] && extra_args+=(-s "${SPLIT_SIZE}m")
-
-              # تلاش ۱: zip استاندارد
               if zip -r "-${CL}" "${extra_args[@]}" "$ARCHIVE_PATH" "$FOLDER_NAME"; then
                 echo "✅ ZIP created successfully."
                 return 0
               fi
               echo "⚠️ zip failed, trying p7zip..."
-
               # تلاش ۲: p7zip
               local p7_args=("-mx=${CL}")
               [ -n "$ZIP_PASSWORD" ] && p7_args+=("-p${ZIP_PASSWORD}")
@@ -775,11 +728,8 @@ jobs:
               echo "❌ All ZIP methods failed."
               return 1
             }
-
             build_zip || echo "⚠️ WARNING: ZIP creation failed — folder still available."
           fi
-
-          # ─── پاک کردن بر اساس output_type ───────────────
           if [ "$OUTPUT_TYPE" = "zip_only" ] && [ -f "$ARCHIVE_PATH" ]; then
             rm -rf "$FOLDER_NAME"
             echo "✅ Folder removed (zip_only mode)."
@@ -787,8 +737,6 @@ jobs:
             rm -f "${ZIP_BASE}.zip" "${ZIP_BASE}.z"[0-9]* 2>/dev/null || true
             echo "✅ ZIP files removed (folder_only mode)."
           fi
-
-          # ─── ذخیره backup ────────────────────────────────
           cp -r . "$BACKUP_DIR/"
           echo "✅ Backup saved to $BACKUP_DIR"
 
@@ -796,7 +744,6 @@ jobs:
       - name: "📝 Generate README and links.txt"
         run: |
           set -euo pipefail
-
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
@@ -808,20 +755,15 @@ jobs:
           DOMAIN="${{ env.DOMAIN }}"
           TIMESTAMP="${{ env.TIMESTAMP }}"
           WAIT_MS="${{ env.WAIT_MS }}"
-
           cd BROWSER
-
           TARGET_DIR="."
           [ -d "$FOLDER_NAME" ] && TARGET_DIR="$FOLDER_NAME"
-
-          # ─── اطلاعات ZIP ─────────────────────────────────
           HAS_ZIP=false
           SHA256=""
           SIZE=""
           TOTAL_PARTS=0
           DOWNLOAD_LINKS_MD=""
           LINKS_TXT_CONTENT=""
-
           if compgen -G "${FOLDER_NAME}.zip" > /dev/null 2>&1; then
             HAS_ZIP=true
             SHA256=$(sha256sum "${FOLDER_NAME}.zip" | awk '{print $1}')
@@ -836,8 +778,6 @@ jobs:
               LINKS_TXT_CONTENT+="${raw_link}"$'\n'
             done
           fi
-
-          # ─── لینک‌های محتوا (folder mode) ───────────────
           FOLDER_LINKS_MD=""
           if [ -d "$FOLDER_NAME" ]; then
             for f in index.html screenshot.png page.pdf page_monolith.html all_links.json; do
@@ -848,8 +788,6 @@ jobs:
               fi
             done
           fi
-
-          # ─── links.txt ───────────────────────────────────
           {
             if [ -n "$LINKS_TXT_CONTENT" ]; then
               printf '%s' "$LINKS_TXT_CONTENT"
@@ -858,8 +796,6 @@ jobs:
               echo "# https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/BROWSER/${FOLDER_NAME}"
             fi
           } > "${TARGET_DIR}/links.txt"
-
-          # ─── README.md (English) ──────────────────────────
           {
             echo "# 🧩 ${FOLDER_NAME}"
             echo ""
@@ -968,8 +904,6 @@ jobs:
             echo ""
             echo "*Powered by [MR.MMD2019](https://github.com/MRmmd2019) · Browser Extractor Pro v3.0*"
           } > "${TARGET_DIR}/README.md"
-
-          # ─── README_FA.md (فارسی) ────────────────────────
           {
             echo "# 🧩 ${FOLDER_NAME}"
             echo ""
@@ -1078,24 +1012,18 @@ jobs:
             echo ""
             echo "*نیرو گرفته از [MR.MMD2019](https://github.com/MRmmd2019) · Browser Extractor Pro v3.0*"
           } > "${TARGET_DIR}/README_FA.md"
-
           echo "✅ README.md, README_FA.md, and links.txt generated."
 
       # ── ۱۱. Commit & Push ────────────────────────────────
       - name: "🚀 Commit and push all files"
         run: |
           set -uo pipefail
-
           BACKUP_DIR="${{ env.BACKUP_DIR }}"
           BRANCH="${{ github.ref_name }}"
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
-
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # ─── sync با remote ───────────────────────────────
           git fetch origin "$BRANCH" --quiet
-
           sync_with_remote() {
             local attempt=$1
             echo "🔄 Sync attempt ${attempt}/5..."
@@ -1108,27 +1036,17 @@ jobs:
               return 1
             fi
           }
-
           git reset --hard origin/"$BRANCH" --quiet
-
           mkdir -p BROWSER
-
-          # کپی backup به BROWSER
           if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
             cp -rf "$BACKUP_DIR"/. BROWSER/ 2>/dev/null || true
           fi
-
-          # ─── جمع‌آوری فایل‌ها ────────────────────────────
           mapfile -t ALL_FILES < <(find BROWSER -type f | sort)
-
           if [ "${#ALL_FILES[@]}" -eq 0 ]; then
             echo "⚠️ Nothing to push."
             exit 0
           fi
-
           echo "📦 Total files to commit: ${#ALL_FILES[@]}"
-
-          # ─── push با fallback ────────────────────────────
           do_push() {
             local retry=0
             while [ $retry -lt 5 ]; do
@@ -1144,12 +1062,9 @@ jobs:
             echo "❌ All push attempts failed."
             return 1
           }
-
-          # ─── commit در batch‌های ۵۰ فایلی ───────────────
           BATCH_SIZE=50
           batch=()
           batch_num=0
-
           commit_and_push_batch() {
             local -a files=("$@")
             for f in "${files[@]}"; do
@@ -1162,7 +1077,6 @@ jobs:
             git commit -m "🤖 [Bot] Archive: ${FOLDER_NAME} (batch ${batch_num}) [skip ci]" --quiet
             do_push || return 1
           }
-
           for f in "${ALL_FILES[@]}"; do
             batch+=("$f")
             if [ "${#batch[@]}" -ge "$BATCH_SIZE" ]; then
@@ -1171,13 +1085,10 @@ jobs:
               batch=()
             fi
           done
-
-          # آخرین batch
           if [ "${#batch[@]}" -gt 0 ]; then
             batch_num=$((batch_num + 1))
             commit_and_push_batch "${batch[@]}" || { echo "❌ Final batch push failed!"; exit 1; }
           fi
-
           echo "✅ All files committed and pushed successfully."
 
       # ── ۱۲. Summary ──────────────────────────────────────

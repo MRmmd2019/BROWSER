@@ -1,11 +1,8 @@
 # ============================================================
 #  🧩 Browser Extractor Pro — v3.0
 #  نویسنده: MR.MMD2019
-#  آخرین بروزرسانی: 2025
 # ============================================================
-
 name: 🧩 Browser Extractor Pro
-
 "on":
   workflow_dispatch:
     inputs:
@@ -13,7 +10,6 @@ name: 🧩 Browser Extractor Pro
         description: '🌐 آدرس صفحه برای استخراج (URL کامل با https://)'
         required: true
         type: string
-
       output_type:
         description: '📁 نوع خروجی نهایی'
         required: true
@@ -23,42 +19,34 @@ name: 🧩 Browser Extractor Pro
           - zip_only
           - zip_and_folder
           - folder_only
-
       enable_split:
         description: '✂️ فعال‌سازی تقسیم فایل ZIP به تکه‌های کوچک‌تر'
         type: boolean
         default: false
-
       split_parts:
         description: '🔢 تعداد تکه‌ها (فقط اگر enable_split فعال باشد)'
         type: number
         default: 1
-
       max_part_size_mb:
         description: '📦 حداکثر حجم هر تکه به MB (خالی = تقسیم بر اساس تعداد)'
         type: string
         default: ''
-
       compression_level:
         description: '🗜️ سطح فشرده‌سازی ZIP (۱=سریع تا ۹=حداکثر فشرده)'
         type: number
         default: 6
-
       zip_password:
         description: '🔐 رمز عبور فایل ZIP (اختیاری — خالی = بدون رمز)'
         type: string
         default: ''
-
       screenshot_retries:
         description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۵)'
         type: number
         default: 3
-
       pdf_retries:
         description: '📄 تعداد تلاش مجدد برای PDF (۱-۵)'
         type: number
         default: 3
-
       pdf_text_align:
         description: '📐 جهت متن در PDF'
         type: choice
@@ -67,12 +55,10 @@ name: 🧩 Browser Extractor Pro
           - rtl
           - ltr
           - center
-
       wait_extra_ms:
         description: '⏱️ زمان انتظار اضافی پس از لود صفحه به میلی‌ثانیه (پیش‌فرض ۵۰۰۰)'
         type: number
         default: 5000
-
 # ─────────────────────────────────────────────
 jobs:
   extract:
@@ -81,7 +67,6 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
-
     steps:
       # ── ۱. Checkout ────────────────────────────────────────
       - name: "📥 Checkout repository"
@@ -89,7 +74,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
       # ── ۲. Validate inputs ─────────────────────────────────
       - name: "✅ Validate inputs"
         env:
@@ -100,13 +84,11 @@ jobs:
           WAIT_INPUT: "${{ github.event.inputs.wait_extra_ms }}"
         run: |
           set -euo pipefail
-
           URL="$URL_INPUT"
           if [[ ! "$URL" =~ ^https?:// ]]; then
             echo "❌ ERROR: URL must start with http:// or https://"
             exit 1
           fi
-
           CL="$CL_INPUT"
           if ! [[ "$CL" =~ ^[1-9]$ ]]; then
             echo "⚠️ WARNING: compression_level '$CL' is invalid, resetting to 6"
@@ -114,30 +96,25 @@ jobs:
           else
             echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV
           fi
-
           SR="$SR_INPUT"
           if ! [[ "$SR" =~ ^[1-5]$ ]]; then
             echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV
           else
             echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV
           fi
-
           PR="$PR_INPUT"
           if ! [[ "$PR" =~ ^[1-5]$ ]]; then
             echo "PDF_RETRIES=3" >> $GITHUB_ENV
           else
             echo "PDF_RETRIES=$PR" >> $GITHUB_ENV
           fi
-
           WAIT="$WAIT_INPUT"
           if ! [[ "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then
             echo "WAIT_MS=5000" >> $GITHUB_ENV
           else
             echo "WAIT_MS=$WAIT" >> $GITHUB_ENV
           fi
-
           echo "✅ All inputs validated."
-
       # ── ۳. System dependencies ─────────────────────────────
       - name: "🔧 Install system dependencies"
         run: |
@@ -146,15 +123,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             curl zip wget aria2 bc jq p7zip-full python3 ca-certificates
           echo "✅ System dependencies installed."
-
       # ── ۴. Node.js + Playwright ────────────────────────────
       - name: "🎭 Setup Node.js and Playwright"
         run: |
           set -euo pipefail
           npm init -y --quiet
           npm install playwright@latest --save-exact --quiet
-
-          # نصب Chromium با fallback به Firefox
           if npx playwright install --with-deps chromium 2>/dev/null; then
             echo "BROWSER_TYPE=chromium" >> $GITHUB_ENV
             echo "✅ Chromium installed."
@@ -164,12 +138,10 @@ jobs:
             echo "BROWSER_TYPE=firefox" >> $GITHUB_ENV
             echo "✅ Firefox installed as fallback."
           fi
-
       # ── ۵. Monolith ────────────────────────────────────────
       - name: "📦 Setup Monolith"
         run: |
           set -uo pipefail
-
           install_monolith_binary() {
             echo "⬇️ Attempting binary download..."
             DOWNLOAD_URL=$(curl -fsSL \
@@ -178,13 +150,10 @@ jobs:
               "https://api.github.com/repos/Y2Z/monolith/releases/latest" \
               | jq -r '.assets[] | select(.name | test("x86_64-unknown-linux")) | .browser_download_url' \
               | head -1)
-
             if [ -n "$DOWNLOAD_URL" ]; then
               aria2c -x 4 -s 4 --retry-wait=3 --max-tries=3 \
                 -H "User-Agent: GitHub-Actions-Bot/3.0" \
                 "$DOWNLOAD_URL" -o monolith_dl 2>/dev/null
-
-              # تشخیص نوع فایل
               if file monolith_dl | grep -q "gzip\|tar"; then
                 tar xzf monolith_dl
               elif file monolith_dl | grep -q "ELF"; then
@@ -192,14 +161,12 @@ jobs:
               else
                 tar xzf monolith_dl 2>/dev/null || mv monolith_dl monolith
               fi
-
               chmod +x monolith
               sudo mv monolith /usr/local/bin/
               return 0
             fi
             return 1
           }
-
           install_monolith_cargo() {
             echo "🔨 Building from source with Cargo..."
             if command -v cargo &>/dev/null || (sudo apt-get install -y cargo 2>/dev/null); then
@@ -207,8 +174,6 @@ jobs:
             fi
             return 1
           }
-
-          # سه fallback برای نصب
           if monolith --version &>/dev/null; then
             echo "✅ Monolith already available."
           elif install_monolith_binary; then
@@ -219,50 +184,37 @@ jobs:
             echo "⚠️ WARNING: Monolith unavailable. Will use wget fallback for monolithic HTML."
             echo "MONOLITH_AVAILABLE=false" >> $GITHUB_ENV
           fi
-
           if monolith --version &>/dev/null; then
             echo "MONOLITH_AVAILABLE=true" >> $GITHUB_ENV
             monolith --version
           fi
-
       # ── ۶. Prepare output directory ────────────────────────
       - name: "📁 Prepare output directory"
         run: |
           set -euo pipefail
-
           URL="${{ github.event.inputs.url }}"
-
-          # استخراج دامنه با پاک‌سازی www
           DOMAIN=$(echo "$URL" | awk -F'/' '{print $3}' | sed 's/^www\.//' | sed 's/:.*//')
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           FOLDER_NAME="${DOMAIN}_${TIMESTAMP}"
           OUT_DIR="BROWSER/${FOLDER_NAME}"
-
           mkdir -p "$OUT_DIR/assets"
-
-          # ذخیره URL پاک (بدون query string) برای monolith
           CLEAN_URL=$(echo "$URL" | sed 's/\?.*//' | sed 's/#.*//')
-
           echo "OUT_DIR=$OUT_DIR"             >> $GITHUB_ENV
           echo "FOLDER_NAME=$FOLDER_NAME"     >> $GITHUB_ENV
           echo "DOMAIN=$DOMAIN"               >> $GITHUB_ENV
           echo "URL=$URL"                     >> $GITHUB_ENV
           echo "CLEAN_URL=$CLEAN_URL"         >> $GITHUB_ENV
           echo "TIMESTAMP=$TIMESTAMP"         >> $GITHUB_ENV
-
           echo "✅ Output directory: $OUT_DIR"
-
       # ── ۷. Extract page with Playwright ───────────────────
       - name: "🎭 Extract page with Playwright"
         run: |
           set -uo pipefail
-
           cat > extract.js << 'PLAYWRIGHT_SCRIPT'
           'use strict';
           const { chromium, firefox } = require('playwright');
           const fs = require('fs');
           const path = require('path');
-
           const url          = process.argv[2];
           const outDir       = process.argv[3];
           const browserType  = process.argv[4] || 'chromium';
@@ -270,12 +222,9 @@ jobs:
           const pdfRetries   = Math.min(Math.max(parseInt(process.argv[6] || '3'), 1), 5);
           const pdfAlign     = process.argv[7] || 'rtl';
           const waitMs       = Math.min(parseInt(process.argv[8] || '5000'), 30000);
-
-          // ─── Headers & User-Agent ──────────────────────────────────
           const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
             'AppleWebKit/537.36 (KHTML, like Gecko) ' +
             'Chrome/124.0.0.0 Safari/537.36';
-
           const EXTRA_HEADERS = {
             'Accept':                    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language':           'en-US,en;q=0.9,fa;q=0.8',
@@ -292,10 +241,7 @@ jobs:
             'Upgrade-Insecure-Requests': '1',
             'DNT':                       '1',
           };
-
           const MAIN_DOMAIN = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
-
-          // ─── Utility: sanitize file path ──────────────────────────
           function sanitizePath(urlPath) {
             let p = '';
             try { p = decodeURIComponent(urlPath); } catch { p = urlPath; }
@@ -303,11 +249,7 @@ jobs:
             if (p.endsWith('/') || p === '') p += 'index.html';
             return p;
           }
-
-          // ─── Utility: sleep ───────────────────────────────────────
           const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-          // ─── Link categorization ──────────────────────────────────
           function categorizeLinks(links, mainDomain) {
             const EXT_MAP = {
               css: 'css', js: 'js',
@@ -327,7 +269,6 @@ jobs:
             const KNOWN_SOCIAL    = ['facebook.com','twitter.com','instagram.com','linkedin.com','youtube.com','tiktok.com','t.co','x.com','pinterest.com','snapchat.com','reddit.com'];
             const KNOWN_CDN       = ['cdn.','static.','assets.','media.','img.','images.','js.','css.','files.'];
             const KNOWN_AD        = ['doubleclick.net','googlesyndication.com','adservice.google','adnxs.com','moatads.com','criteo.com','taboola.com','outbrain.com'];
-
             const out = {
               summary: { total: links.length },
               internal: { pages: [], css: [], js: [], images: [], fonts: [], media: [], documents: [], data: [], feeds: [], archives: [], other: [] },
@@ -337,38 +278,28 @@ jobs:
               feeds: [],
               uncategorized: [],
             };
-
             for (const link of links) {
               if (!link || typeof link !== 'string' || link.trim() === '') continue;
               const l = link.trim();
-
-              // پروتکل‌های خاص
               if (l.startsWith('mailto:'))     { out.special.mailto.push(l);     continue; }
               if (l.startsWith('tel:'))        { out.special.tel.push(l);        continue; }
               if (l.startsWith('data:'))       { out.special.data_urls.push(l);  continue; }
               if (l.startsWith('blob:'))       { out.special.blob.push(l);       continue; }
               if (l.startsWith('javascript:')) { out.special.javascript.push(l); continue; }
               if (l.startsWith('#'))           { out.special.anchor.push(l);     continue; }
-
               let parsed;
               try { parsed = new URL(l); } catch { out.uncategorized.push(l); continue; }
-
               const hostname = parsed.hostname;
               const pathname = parsed.pathname;
               const extRaw   = pathname.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
               const ext      = EXT_MAP[extRaw];
               const isInt    = mainDomain && (hostname === mainDomain || hostname.endsWith('.' + mainDomain));
-
-              // feeds
               if (ext === 'feeds' || pathname.includes('/feed') || pathname.includes('/rss')) {
                 out.feeds.push(l); continue;
               }
-
-              // API endpoints
               if (/\/(api|graphql|rest|v\d+|gql)\//i.test(pathname) || parsed.searchParams.has('api_key')) {
                 out.apis.push(l); continue;
               }
-
               if (isInt) {
                 const bucket = out.internal[ext] || out.internal.other;
                 if (Array.isArray(bucket)) bucket.push(l);
@@ -382,8 +313,6 @@ jobs:
                 else { out.external.pages.push(l); }
               }
             }
-
-            // خلاصه
             out.summary.internal_pages  = out.internal.pages.length;
             out.summary.internal_assets = Object.values(out.internal).flat().length - out.internal.pages.length;
             out.summary.external_total  = Object.values(out.external).flat().length;
@@ -392,8 +321,6 @@ jobs:
             out.summary.special_links   = Object.values(out.special).flat().length;
             return out;
           }
-
-          // ─── PDF: خواندن صحیح stream به صورت chunk‌ها ────────────
           async function readPdfStream(session, stream) {
             const chunks = [];
             let eof = false;
@@ -407,8 +334,6 @@ jobs:
             await session.send('IO.close', { handle: stream }).catch(() => {});
             return Buffer.concat(chunks);
           }
-
-          // ─── Page navigation با چند fallback ─────────────────────
           async function navigateWithFallback(page, targetUrl) {
             const strategies = [
               { waitUntil: 'networkidle', timeout: 90000 },
@@ -416,7 +341,6 @@ jobs:
               { waitUntil: 'load', timeout: 45000 },
               { waitUntil: 'commit', timeout: 30000 },
             ];
-
             for (let i = 0; i < strategies.length; i++) {
               try {
                 console.log(`[Nav] Strategy ${i + 1}/${strategies.length}: waitUntil=${strategies[i].waitUntil}`);
@@ -431,8 +355,6 @@ jobs:
             console.error('[Nav] ❌ All navigation strategies failed.');
             return false;
           }
-
-          // ─── Asset interceptor ────────────────────────────────────
           function setupAssetCapture(page, outDir, mainDomain) {
             const captured = new Set();
             page.on('response', async (response) => {
@@ -440,11 +362,9 @@ jobs:
                 if (response.status() < 200 || response.status() >= 400) return;
                 const respUrl = (() => { try { return new URL(response.url()); } catch { return null; } })();
                 if (!respUrl) return;
-
                 const isInternal = respUrl.hostname === mainDomain ||
                                    respUrl.hostname.endsWith('.' + mainDomain);
                 if (!isInternal) return;
-
                 const ct = (response.headers()['content-type'] || '').toLowerCase();
                 const isAsset =
                   ct.includes('text/css') ||
@@ -455,14 +375,11 @@ jobs:
                   ct.includes('application/xml') ||
                   ct.includes('audio/') ||
                   ct.includes('video/');
-
                 if (!isAsset) return;
                 if (captured.has(response.url())) return;
                 captured.add(response.url());
-
                 const buffer = await response.body();
                 if (!buffer || buffer.length === 0) return;
-
                 const cleanPath = sanitizePath(respUrl.pathname);
                 const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
                 fs.mkdirSync(path.dirname(assetPath), { recursive: true });

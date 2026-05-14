@@ -1,6 +1,6 @@
 name: 🧩 Browser Extractor Pro
 
-"on":
+on:
   workflow_dispatch:
     inputs:
       url:

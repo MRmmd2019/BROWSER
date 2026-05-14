@@ -92,16 +92,22 @@ jobs:
 
       # ── ۲. Validate inputs ─────────────────────────────────
       - name: "✅ Validate inputs"
+        env:
+          URL_INPUT: "${{ github.event.inputs.url }}"
+          CL_INPUT: "${{ github.event.inputs.compression_level }}"
+          SR_INPUT: "${{ github.event.inputs.screenshot_retries }}"
+          PR_INPUT: "${{ github.event.inputs.pdf_retries }}"
+          WAIT_INPUT: "${{ github.event.inputs.wait_extra_ms }}"
         run: |
           set -euo pipefail
 
-          URL="${{ github.event.inputs.url }}"
+          URL="$URL_INPUT"
           if [[ ! "$URL" =~ ^https?:// ]]; then
             echo "❌ ERROR: URL must start with http:// or https://"
             exit 1
           fi
 
-          CL="${{ github.event.inputs.compression_level }}"
+          CL="$CL_INPUT"
           if ! [[ "$CL" =~ ^[1-9]$ ]]; then
             echo "⚠️ WARNING: compression_level '$CL' is invalid, resetting to 6"
             echo "COMPRESSION_LEVEL=6" >> $GITHUB_ENV
@@ -109,21 +115,21 @@ jobs:
             echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV
           fi
 
-          SR="${{ github.event.inputs.screenshot_retries }}"
+          SR="$SR_INPUT"
           if ! [[ "$SR" =~ ^[1-5]$ ]]; then
             echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV
           else
             echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV
           fi
 
-          PR="${{ github.event.inputs.pdf_retries }}"
+          PR="$PR_INPUT"
           if ! [[ "$PR" =~ ^[1-5]$ ]]; then
             echo "PDF_RETRIES=3" >> $GITHUB_ENV
           else
             echo "PDF_RETRIES=$PR" >> $GITHUB_ENV
           fi
 
-          WAIT="${{ github.event.inputs.wait_extra_ms }}"
+          WAIT="$WAIT_INPUT"
           if ! [[ "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then
             echo "WAIT_MS=5000" >> $GITHUB_ENV
           else

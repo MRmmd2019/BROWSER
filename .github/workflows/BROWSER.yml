@@ -92,22 +92,16 @@ jobs:
 
       # ── ۲. Validate inputs ─────────────────────────────────
       - name: "✅ Validate inputs"
-        env:
-          URL_INPUT: "${{ github.event.inputs.url }}"
-          CL_INPUT: "${{ github.event.inputs.compression_level }}"
-          SR_INPUT: "${{ github.event.inputs.screenshot_retries }}"
-          PR_INPUT: "${{ github.event.inputs.pdf_retries }}"
-          WAIT_INPUT: "${{ github.event.inputs.wait_extra_ms }}"
         run: |
           set -euo pipefail
 
-          URL="$URL_INPUT"
+          URL="${{ github.event.inputs.url }}"
           if [[ ! "$URL" =~ ^https?:// ]]; then
             echo "❌ ERROR: URL must start with http:// or https://"
             exit 1
           fi
 
-          CL="$CL_INPUT"
+          CL="${{ github.event.inputs.compression_level }}"
           if ! [[ "$CL" =~ ^[1-9]$ ]]; then
             echo "⚠️ WARNING: compression_level '$CL' is invalid, resetting to 6"
             echo "COMPRESSION_LEVEL=6" >> $GITHUB_ENV
@@ -115,21 +109,21 @@ jobs:
             echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV
           fi
 
-          SR="$SR_INPUT"
+          SR="${{ github.event.inputs.screenshot_retries }}"
           if ! [[ "$SR" =~ ^[1-5]$ ]]; then
             echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV
           else
             echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV
           fi
 
-          PR="$PR_INPUT"
+          PR="${{ github.event.inputs.pdf_retries }}"
           if ! [[ "$PR" =~ ^[1-5]$ ]]; then
             echo "PDF_RETRIES=3" >> $GITHUB_ENV
           else
             echo "PDF_RETRIES=$PR" >> $GITHUB_ENV
           fi
 
-          WAIT="$WAIT_INPUT"
+          WAIT="${{ github.event.inputs.wait_extra_ms }}"
           if ! [[ "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then
             echo "WAIT_MS=5000" >> $GITHUB_ENV
           else
@@ -471,87 +465,41 @@ jobs:
             });
           }
 
-          // ─── Ultimate Page Loader — ترکیب سه روش برای بارگذاری کامل و سریع ──
-          async function ultimatePageLoad(page) {
-            const maxSteps = 150;             // حداکثر تعداد گام‌های اسکرول
-            const networkIdleTimeout = 10000; // ۱۰ ثانیه انتظار برای آرام‌شدن شبکه در هر گام
-            const checkInterval = 1500;       // فاصله بررسی تعداد تصاویر (میلی‌ثانیه)
-            const noChangeThreshold = 4;      // توقف پس از ۴ بار عدم تغییر در تعداد تصاویر
-            const finalWait = 5000;           // ۵ ثانیه تأخیر نهایی
+          // ─── Smart scroll: scrolls step-by-step, waits for images to load ──
+          async function smartScroll(page) {
+            const scrollStep = 500;
+            const maxSteps = 200;
+            const idleTimeout = 60000;
+            const finalWait = 60000;
+            const noChangeThreshold = 10;
 
-            // ─── ۱. فعال‌سازی اجباری تمام تصاویر تنبل (Lazy Images) ───
-            await page.evaluate(() => {
-              const forceLoad = (img) => {
-                if (img.dataset.src)      { img.src = img.dataset.src;         img.removeAttribute('data-src'); }
-                if (img.dataset.lazySrc)  { img.src = img.dataset.lazySrc;     img.removeAttribute('data-lazy-src'); }
-                if (img.dataset.original) { img.src = img.dataset.original;    img.removeAttribute('data-original'); }
-                if (img.loading === 'lazy') img.loading = 'eager';
-              };
-
-              // فعال‌سازی تمام imgها با ویژگی‌های data-...
-              document.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original], img[loading="lazy"]').forEach(forceLoad);
-
-              // فعال‌سازی sourceها درون picture/video
-              document.querySelectorAll('source[data-src], source[data-srcset]').forEach(source => {
-                if (source.dataset.src)    { source.src    = source.dataset.src;    source.removeAttribute('data-src'); }
-                if (source.dataset.srcset) { source.srcset = source.dataset.srcset; source.removeAttribute('data-srcset'); }
-              });
-            });
-
-            // ─── ۲. پیمایش هوشمند صفحه (Smart Scroll) ───
-            // تابع کمکی برای دریافت تعداد تصاویر بارگذاری‌شده
-            async function countLoadedImages() {
-              return await page.evaluate(() =>
-                Array.from(document.querySelectorAll('img')).filter(img => img.complete && img.naturalWidth > 0).length
-              );
-            }
-
+            let previousHeight = 0;
             let noChangeCount = 0;
-            let lastLoadedCount = await countLoadedImages();
 
             for (let step = 0; step < maxSteps; step++) {
-              // اسکرول به پایین صفحه (هم پنجره اصلی، هم سکشن‌های داخلی)
-              await page.evaluate(() => {
-                const dy = 500;
-                window.scrollBy(0, dy);
-                // تلاش برای اسکرول کردن هر عنصر قابل اسکرول داخلی
-                document.querySelectorAll('*').forEach(el => {
-                  const style = window.getComputedStyle(el);
-                  if (style.overflowY === 'scroll' || style.overflowY === 'auto') {
-                    el.scrollBy(0, dy);
-                  }
-                });
-              });
+              await page.evaluate((dy) => window.scrollBy(0, dy), scrollStep);
 
-              // انتظار برای آرام‌شدن شبکه (بارگذاری تصاویر)
+              // منتظر آرام‌شدن شبکه (تصاویر در حال بارگذاری)
               try {
-                await page.waitForLoadState('networkidle', { timeout: networkIdleTimeout });
+                await page.waitForLoadState('networkidle', { timeout: idleTimeout });
               } catch {
-                // اگر در این مدت شبکه آرام نشد، اشکالی ندارد
+                // اگر در این مدت networkidle نشد، ادامه می‌دهیم
               }
 
-              // بررسی نتیجه
-              const currentLoaded = await countLoadedImages();
-              console.log(`[Ultimate] Step ${step+1}: ${lastLoadedCount} → ${currentLoaded} images loaded`);
-
-              if (currentLoaded > lastLoadedCount) {
-                noChangeCount = 0;
-                lastLoadedCount = currentLoaded;
-              } else {
+              // بررسی تغییر ارتفاع صفحه
+              const currentHeight = await page.evaluate(() => document.body.scrollHeight);
+              if (currentHeight === previousHeight) {
                 noChangeCount++;
-                if (noChangeCount >= noChangeThreshold) {
-                  console.log('[Ultimate] ✅ Page fully loaded.');
-                  break;
-                }
+                if (noChangeCount >= noChangeThreshold) break;
+              } else {
+                noChangeCount = 0;
+                previousHeight = currentHeight;
               }
             }
 
-            // ─── ۳. بازگشت به بالا و تأخیر نهایی ───
+            // برگشت به بالای صفحه و تأخیر نهایی
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.waitForTimeout(finalWait);
-  
-            const finalCount = await countLoadedImages();
-            console.log(`[Ultimate] Final image count: ${finalCount}`);
           }
 
           // ─── Link collection ─────────────────────────────────────
@@ -694,8 +642,8 @@ jobs:
               }
 
               // ─── Scroll + wait ───────────────────────────────
-              await ultimatePageLoad(page);
-              
+              await smartScroll(page);
+
               // ─── Link collection ─────────────────────────────
               const rawLinks = await collectLinks(page);
               const categorized = categorizeLinks(rawLinks, MAIN_DOMAIN);
@@ -889,19 +837,6 @@ jobs:
 
       # ── ۱۰. Generate READMEs & links.txt ─────────────────
       - name: "📝 Generate README and links.txt"
-        env:
-          FOLDER_NAME: "${{ env.FOLDER_NAME }}"
-          REPO_OWNER: "${{ github.repository_owner }}"
-          REPO_FULL: "${{ github.repository }}"
-          BRANCH: "${{ github.ref_name }}"
-          ZIP_PASSWORD: "${{ github.event.inputs.zip_password }}"
-          CL: "${{ env.COMPRESSION_LEVEL }}"
-          OUTPUT_TYPE: "${{ github.event.inputs.output_type }}"
-          URL: "${{ env.URL }}"
-          DOMAIN: "${{ env.DOMAIN }}"
-          TIMESTAMP: "${{ env.TIMESTAMP }}"
-          PDF_ALIGN: "${{ github.event.inputs.pdf_text_align }}"
-          WAIT_MS: ${{ env.WAIT_MS }}
         run: |
           set -euo pipefail
 
@@ -915,6 +850,7 @@ jobs:
           URL="${{ env.URL }}"
           DOMAIN="${{ env.DOMAIN }}"
           TIMESTAMP="${{ env.TIMESTAMP }}"
+          WAIT_MS="${{ env.WAIT_MS }}"
 
           cd BROWSER
 
@@ -983,7 +919,7 @@ jobs:
             echo "| **Captured At** | ${TIMESTAMP} (UTC) |"
             echo "| **Output Type** | \`${OUTPUT_TYPE}\` |"
             echo "| **Compression Level** | ${CL}/9 |"
-            echo "| **PDF Direction** | ${PDF_ALIGN} |"
+            echo "| **PDF Direction** | ${{ github.event.inputs.pdf_text_align }} |"
             echo "| **Password Protected** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ YES" || echo "❌ NO") |"
             if [ "$HAS_ZIP" = true ]; then
               echo "| **Total ZIP Size** | ${SIZE} (${TOTAL_PARTS} part(s)) |"
@@ -1093,7 +1029,7 @@ jobs:
             echo "| **زمان آرشیو** | ${TIMESTAMP} (UTC) |"
             echo "| **نوع خروجی** | \`${OUTPUT_TYPE}\` |"
             echo "| **سطح فشرده‌سازی** | ${CL} از ۹ |"
-            echo "| **جهت PDF** | ${PDF_ALIGN} |"
+            echo "| **جهت PDF** | ${{ github.event.inputs.pdf_text_align }} |"
             echo "| **محافظت با رمز** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ بله" || echo "❌ خیر") |"
             if [ "$HAS_ZIP" = true ]; then
               echo "| **حجم کل ZIP** | ${SIZE} (${TOTAL_PARTS} بخش) |"
@@ -1290,26 +1226,20 @@ jobs:
       # ── ۱۲. Summary ──────────────────────────────────────
       - name: "📊 Workflow Summary"
         if: always()
-        env:
-          URL: "${{ github.event.inputs.url }}"
-          OUTPUT_TYPE: "${{ github.event.inputs.output_type }}"
-          COMPRESSION: "${{ env.COMPRESSION_LEVEL }}"
-          BROWSER: "${{ env.BROWSER_TYPE }}"
-          FOLDER: "${{ env.FOLDER_NAME }}"
         run: |
           echo "## 🧩 Browser Extractor Pro — Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **URL** | \`${URL}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Output type** | \`${OUTPUT_TYPE}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Compression** | ${COMPRESSION}/9 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Browser** | ${BROWSER} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Folder** | \`BROWSER/${FOLDER}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | \`${{ github.event.inputs.url }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Output type** | \`${{ github.event.inputs.output_type }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Compression** | ${{ env.COMPRESSION_LEVEL }}/9 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Browser** | ${{ env.BROWSER_TYPE }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Folder** | \`BROWSER/${{ env.FOLDER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -d "BROWSER/${FOLDER}" ]; then
-            FILE_COUNT=$(find "BROWSER/${FOLDER}" -type f | wc -l)
-            FOLDER_SIZE=$(du -sh "BROWSER/${FOLDER}" 2>/dev/null | cut -f1 || echo "?")
+          if [ -d "BROWSER/${{ env.FOLDER_NAME }}" ]; then
+            FILE_COUNT=$(find "BROWSER/${{ env.FOLDER_NAME }}" -type f | wc -l)
+            FOLDER_SIZE=$(du -sh "BROWSER/${{ env.FOLDER_NAME }}" 2>/dev/null | cut -f1 || echo "?")
             echo "| **Files captured** | ${FILE_COUNT} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Folder size** | ${FOLDER_SIZE} |" >> $GITHUB_STEP_SUMMARY
           fi

@@ -1295,15 +1295,15 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **URL** | \`${{ github.event.inputs.url }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Output type** | \`${{ github.event.inputs.output_type }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Compression** | ${{ env.COMPRESSION_LEVEL }}/9 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Browser** | ${{ env.BROWSER_TYPE }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Folder** | \`BROWSER/${{ env.FOLDER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | \`${URL}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Output type** | \`${OUTPUT_TYPE}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Compression** | ${COMPRESSION}/9 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Browser** | ${BROWSER} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Folder** | \`BROWSER/${FOLDER}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -d "BROWSER/${{ env.FOLDER_NAME }}" ]; then
-            FILE_COUNT=$(find "BROWSER/${{ env.FOLDER_NAME }}" -type f | wc -l)
-            FOLDER_SIZE=$(du -sh "BROWSER/${{ env.FOLDER_NAME }}" 2>/dev/null | cut -f1 || echo "?")
+          if [ -d "BROWSER/${FOLDER}" ]; then
+            FILE_COUNT=$(find "BROWSER/${FOLDER}" -type f | wc -l)
+            FOLDER_SIZE=$(du -sh "BROWSER/${FOLDER}" 2>/dev/null | cut -f1 || echo "?")
             echo "| **Files captured** | ${FILE_COUNT} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Folder size** | ${FOLDER_SIZE} |" >> $GITHUB_STEP_SUMMARY
           fi

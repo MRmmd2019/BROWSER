@@ -1,1 +1,147 @@
+name: 🧩 Browser Extractor Pro
 
+"on":
+  workflow_dispatch:
+    inputs:
+      url:
+        description: '🌐 آدرس صفحه برای استخراج (URL کامل با https://)'
+        required: true
+        type: string
+      output_type:
+        description: '📁 نوع خروجی نهایی'
+        required: true
+        type: choice
+        default: 'zip_and_folder'
+        options:
+          - zip_only
+          - zip_and_folder
+          - folder_only
+      enable_split:
+        description: '✂️ فعال‌سازی تقسیم فایل ZIP به تکه‌های کوچک‌تر'
+        type: boolean
+        default: false
+      split_parts:
+        description: '🔢 تعداد تکه‌ها (فقط اگر enable_split فعال باشد)'
+        type: number
+        default: 1
+      max_part_size_mb:
+        description: '📦 حداکثر حجم هر تکه به MB (خالی = تقسیم بر اساس تعداد)'
+        type: string
+        default: ''
+      compression_level:
+        description: '🗜️ سطح فشرده‌سازی ZIP (۱=سریع تا ۹=حداکثر فشرده)'
+        type: number
+        default: 6
+      zip_password:
+        description: '🔐 رمز عبور فایل ZIP (اختیاری — خالی = بدون رمز)'
+        type: string
+        default: ''
+      screenshot_retries:
+        description: '📸 تعداد تلاش مجدد برای اسکرین‌شات (۱-۵)'
+        type: number
+        default: 3
+      pdf_retries:
+        description: '📄 تعداد تلاش مجدد برای PDF (۱-۵)'
+        type: number
+        default: 3
+      pdf_text_align:
+        description: '📐 جهت متن در PDF'
+        type: choice
+        default: 'rtl'
+        options:
+          - rtl
+          - ltr
+          - center
+      wait_extra_ms:
+        description: '⏱️ زمان انتظار اضافی پس از لود صفحه به میلی‌ثانیه (پیش‌فرض ۵۰۰۰)'
+        type: number
+        default: 5000
+
+jobs:
+  extract:
+    name: 🕷️ Extract & Archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      # ── ۱. Checkout ────────────────────────────────────────
+      - name: "📥 Checkout repository"
+        uses: ./.github/actions/checkout
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── ۲. Validate inputs ─────────────────────────────────
+      - name: "✅ Validate inputs"
+        uses: ./.github/actions/validate
+        with:
+          url: ${{ github.event.inputs.url }}
+          compression_level: ${{ github.event.inputs.compression_level }}
+          screenshot_retries: ${{ github.event.inputs.screenshot_retries }}
+          pdf_retries: ${{ github.event.inputs.pdf_retries }}
+          wait_extra_ms: ${{ github.event.inputs.wait_extra_ms }}
+
+      # ── ۳. System dependencies ─────────────────────────────
+      - name: "🔧 Install system dependencies"
+        uses: ./.github/actions/dependencies
+
+      # ── ۴. Node.js + Playwright ────────────────────────────
+      - name: "🎭 Setup Node.js and Playwright"
+        uses: ./.github/actions/playwright-setup
+
+      # ── ۵. Monolith ────────────────────────────────────────
+      - name: "📦 Setup Monolith"
+        uses: ./.github/actions/monolith-setup
+
+      # ── ۶. Prepare output directory ────────────────────────
+      - name: "📁 Prepare output directory"
+        uses: ./.github/actions/prepare-dir
+        with:
+          url: ${{ github.event.inputs.url }}
+
+      # ── ۷. Extract page with Playwright ───────────────────
+      - name: "🎭 Extract page with Playwright"
+        uses: ./.github/actions/extract-page
+        with:
+          url: ${{ github.event.inputs.url }}
+          screenshot_retries: ${{ github.event.inputs.screenshot_retries }}
+          pdf_retries: ${{ github.event.inputs.pdf_retries }}
+          pdf_text_align: ${{ github.event.inputs.pdf_text_align }}
+          wait_extra_ms: ${{ github.event.inputs.wait_extra_ms }}
+
+      # ── ۸. Monolithic HTML ────────────────────────────────
+      - name: "🧱 Create monolithic HTML (Monolith)"
+        uses: ./.github/actions/monolithic-html
+
+      # ── ۹. Package & ZIP ──────────────────────────────────
+      - name: "📦 Package output and create ZIP"
+        uses: ./.github/actions/package
+        with:
+          output_type: ${{ github.event.inputs.output_type }}
+          enable_split: ${{ github.event.inputs.enable_split }}
+          split_parts: ${{ github.event.inputs.split_parts }}
+          max_part_size_mb: ${{ github.event.inputs.max_part_size_mb }}
+          compression_level: ${{ github.event.inputs.compression_level }}
+          zip_password: ${{ github.event.inputs.zip_password }}
+
+      # ── ۱۰. Generate READMEs & links.txt ─────────────────
+      - name: "📝 Generate README and links.txt"
+        uses: ./.github/actions/readme
+        with:
+          url: ${{ github.event.inputs.url }}
+          output_type: ${{ github.event.inputs.output_type }}
+          pdf_text_align: ${{ github.event.inputs.pdf_text_align }}
+
+      # ── ۱۱. Commit & Push ────────────────────────────────
+      - name: "🚀 Commit and push all files"
+        uses: ./.github/actions/commit-push
+
+      # ── ۱۲. Summary ──────────────────────────────────────
+      - name: "📊 Workflow Summary"
+        if: always()
+        uses: ./.github/actions/summary
+
+      # ── ۱۳. Cleanup ──────────────────────────────────────
+      - name: "🧹 Cleanup temporary files"
+        if: always()
+        uses: ./.github/actions/cleanup

@@ -465,41 +465,99 @@ jobs:
             });
           }
 
-          // ─── Smart scroll: scrolls step-by-step, waits for images to load ──
-          async function smartScroll(page) {
-            const scrollStep = 500;
-            const maxSteps = 200;
-            const idleTimeout = 60000;
-            const finalWait = 60000;
-            const noChangeThreshold = 10;
+          // ─── Ultimate Page Loader v4 – سریع‌تر، هوشمندتر، مقاوم‌تر ──
+          async function ultimatePageLoad(page) {
+            const maxScrollSteps = 200;         // حداکثر گام (پوشش ۱۰۰,۰۰۰px+)
+            const scrollDistance = 500;         // اسکرول هر بار
+            const idleWait = 1500;              // انتظار کوتاه پس از هر اسکرول (ms)
+            const networkIdleTimeout = 5000;    // ۵ ثانیه انتظار برای آرام‌شدن شبکه
+            const noChangeLimit = 5;            // توقف پس از ۵ بار عدم افزایش تصاویر
+            const finalWait = 3000;             // تأخیر نهایی
 
-            let previousHeight = 0;
+            // تزریق MutationObserver برای ردیابی لحظه‌ای اضافه‌شدن تصاویر
+            await page.evaluate(() => {
+              // فعال‌سازی اجباری همه تصاویر تنبل
+              const forceLoad = (img) => {
+                if (img.dataset.src)      { img.src = img.dataset.src;         img.removeAttribute('data-src'); }
+                if (img.dataset.lazySrc)  { img.src = img.dataset.lazySrc;     img.removeAttribute('data-lazy-src'); }
+                if (img.dataset.original) { img.src = img.dataset.original;    img.removeAttribute('data-original'); }
+                if (img.loading === 'lazy') img.loading = 'eager';
+              };
+              document.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original], img[loading="lazy"]').forEach(forceLoad);
+              // sourceها
+              document.querySelectorAll('source[data-src], source[data-srcset]').forEach(source => {
+                if (source.dataset.src)    { source.src    = source.dataset.src;    source.removeAttribute('data-src'); }
+                if (source.dataset.srcset) { source.srcset = source.dataset.srcset; source.removeAttribute('data-srcset'); }
+              });
+
+              // نصب Observer برای تصاویری که ممکن است بعداً توسط جاوااسکریپت اضافه شوند
+              window.__imagesAdded = 0;
+              const observer = new MutationObserver((mutations) => {
+                mutations.forEach(mutation => {
+                  mutation.addedNodes.forEach(node => {
+                    if (node.nodeName === 'IMG') {
+                      forceLoad(node);
+                      window.__imagesAdded++;
+                    } else if (node.querySelectorAll) {
+                      node.querySelectorAll('img').forEach(forceLoad);
+                      window.__imagesAdded++;
+                    }
+                  });
+                });
+              });
+              observer.observe(document.body, { childList: true, subtree: true });
+            });
+
+            // تابع کمکی: تعداد تصاویر بارگذاری‌شده (کامل)
+            const countLoadedImages = () => page.evaluate(() =>
+              Array.from(document.querySelectorAll('img')).filter(img => img.complete && img.naturalWidth > 0).length
+            );
+
             let noChangeCount = 0;
+            let lastLoadedCount = await countLoadedImages();
+            let step = 0;
 
-            for (let step = 0; step < maxSteps; step++) {
-              await page.evaluate((dy) => window.scrollBy(0, dy), scrollStep);
+            while (step < maxScrollSteps) {
+              // اسکرول پنجره اصلی و اسکرول‌بارهای داخلی
+              await page.evaluate((dy) => {
+                window.scrollBy(0, dy);
+                document.querySelectorAll('*').forEach(el => {
+                  const style = window.getComputedStyle(el);
+                  if (style.overflowY === 'scroll' || style.overflowY === 'auto') el.scrollBy(0, dy);
+                });
+              }, scrollDistance);
 
-              // منتظر آرام‌شدن شبکه (تصاویر در حال بارگذاری)
+              // وقفه کوتاه برای شروع بارگذاری
+              await page.waitForTimeout(idleWait);
+
+              // انتظار برای آرام‌شدن نسبی شبکه (با تایم‌اوت کوتاه)
               try {
-                await page.waitForLoadState('networkidle', { timeout: idleTimeout });
-              } catch {
-                // اگر در این مدت networkidle نشد، ادامه می‌دهیم
-              }
+                await page.waitForLoadState('networkidle', { timeout: networkIdleTimeout });
+              } catch { /* مهم نیست */ }
 
-              // بررسی تغییر ارتفاع صفحه
-              const currentHeight = await page.evaluate(() => document.body.scrollHeight);
-              if (currentHeight === previousHeight) {
-                noChangeCount++;
-                if (noChangeCount >= noChangeThreshold) break;
-              } else {
+              // بررسی تصاویر تازه بارگذاری‌شده (حتی آنهایی که Observer ثبت کرده)
+              const currentLoaded = await countLoadedImages();
+              step++;
+              console.log(`[Ultimate] Step ${step}: ${lastLoadedCount} → ${currentLoaded} images`);
+
+              if (currentLoaded > lastLoadedCount) {
                 noChangeCount = 0;
-                previousHeight = currentHeight;
+                lastLoadedCount = currentLoaded;
+              } else {
+                noChangeCount++;
+                if (noChangeCount >= noChangeLimit) {
+                  console.log('[Ultimate] ✅ No new images – page fully loaded.');
+                  break;
+                }
               }
             }
 
-            // برگشت به بالای صفحه و تأخیر نهایی
+            // بازگشت به بالا و مکث کوتاه
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.waitForTimeout(finalWait);
+
+            const finalCount = await countLoadedImages();
+            console.log(`[Ultimate] Final image count: ${finalCount}`);
           }
 
           // ─── Link collection ─────────────────────────────────────

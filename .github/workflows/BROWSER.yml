@@ -250,13 +250,11 @@ jobs:
       - name: "🎭 Extract page with Playwright"
         run: |
           set -uo pipefail
-
           cat > extract.js << 'PLAYWRIGHT_SCRIPT'
           'use strict';
           const { chromium, firefox } = require('playwright');
           const fs = require('fs');
           const path = require('path');
-
           const url          = process.argv[2];
           const outDir       = process.argv[3];
           const browserType  = process.argv[4] || 'chromium';
@@ -264,12 +262,9 @@ jobs:
           const pdfRetries   = Math.min(Math.max(parseInt(process.argv[6] || '3'), 1), 5);
           const pdfAlign     = process.argv[7] || 'rtl';
           const waitMs       = Math.min(parseInt(process.argv[8] || '5000'), 30000);
-
-          // ─── Headers & User-Agent ──────────────────────────────────
           const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
             'AppleWebKit/537.36 (KHTML, like Gecko) ' +
             'Chrome/124.0.0.0 Safari/537.36';
-
           const EXTRA_HEADERS = {
             'Accept':                    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language':           'en-US,en;q=0.9,fa;q=0.8',
@@ -286,10 +281,7 @@ jobs:
             'Upgrade-Insecure-Requests': '1',
             'DNT':                       '1',
           };
-
           const MAIN_DOMAIN = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
-
-          // ─── Utility: sanitize file path ──────────────────────────
           function sanitizePath(urlPath) {
             let p = '';
             try { p = decodeURIComponent(urlPath); } catch { p = urlPath; }
@@ -297,11 +289,7 @@ jobs:
             if (p.endsWith('/') || p === '') p += 'index.html';
             return p;
           }
-
-          // ─── Utility: sleep ───────────────────────────────────────
           const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-          // ─── Link categorization ──────────────────────────────────
           function categorizeLinks(links, mainDomain) {
             const EXT_MAP = {
               css: 'css', js: 'js',
@@ -321,7 +309,6 @@ jobs:
             const KNOWN_SOCIAL    = ['facebook.com','twitter.com','instagram.com','linkedin.com','youtube.com','tiktok.com','t.co','x.com','pinterest.com','snapchat.com','reddit.com'];
             const KNOWN_CDN       = ['cdn.','static.','assets.','media.','img.','images.','js.','css.','files.'];
             const KNOWN_AD        = ['doubleclick.net','googlesyndication.com','adservice.google','adnxs.com','moatads.com','criteo.com','taboola.com','outbrain.com'];
-
             const out = {
               summary: { total: links.length },
               internal: { pages: [], css: [], js: [], images: [], fonts: [], media: [], documents: [], data: [], feeds: [], archives: [], other: [] },
@@ -331,38 +318,28 @@ jobs:
               feeds: [],
               uncategorized: [],
             };
-
             for (const link of links) {
               if (!link || typeof link !== 'string' || link.trim() === '') continue;
               const l = link.trim();
-
-              // پروتکل‌های خاص
               if (l.startsWith('mailto:'))     { out.special.mailto.push(l);     continue; }
               if (l.startsWith('tel:'))        { out.special.tel.push(l);        continue; }
               if (l.startsWith('data:'))       { out.special.data_urls.push(l);  continue; }
               if (l.startsWith('blob:'))       { out.special.blob.push(l);       continue; }
               if (l.startsWith('javascript:')) { out.special.javascript.push(l); continue; }
               if (l.startsWith('#'))           { out.special.anchor.push(l);     continue; }
-
               let parsed;
               try { parsed = new URL(l); } catch { out.uncategorized.push(l); continue; }
-
               const hostname = parsed.hostname;
               const pathname = parsed.pathname;
               const extRaw   = pathname.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
               const ext      = EXT_MAP[extRaw];
               const isInt    = mainDomain && (hostname === mainDomain || hostname.endsWith('.' + mainDomain));
-
-              // feeds
               if (ext === 'feeds' || pathname.includes('/feed') || pathname.includes('/rss')) {
                 out.feeds.push(l); continue;
               }
-
-              // API endpoints
               if (/\/(api|graphql|rest|v\d+|gql)\//i.test(pathname) || parsed.searchParams.has('api_key')) {
                 out.apis.push(l); continue;
               }
-
               if (isInt) {
                 const bucket = out.internal[ext] || out.internal.other;
                 if (Array.isArray(bucket)) bucket.push(l);
@@ -376,8 +353,6 @@ jobs:
                 else { out.external.pages.push(l); }
               }
             }
-
-            // خلاصه
             out.summary.internal_pages  = out.internal.pages.length;
             out.summary.internal_assets = Object.values(out.internal).flat().length - out.internal.pages.length;
             out.summary.external_total  = Object.values(out.external).flat().length;
@@ -386,8 +361,6 @@ jobs:
             out.summary.special_links   = Object.values(out.special).flat().length;
             return out;
           }
-
-          // ─── PDF: خواندن صحیح stream به صورت chunk‌ها ────────────
           async function readPdfStream(session, stream) {
             const chunks = [];
             let eof = false;
@@ -401,8 +374,6 @@ jobs:
             await session.send('IO.close', { handle: stream }).catch(() => {});
             return Buffer.concat(chunks);
           }
-
-          // ─── Page navigation با چند fallback ─────────────────────
           async function navigateWithFallback(page, targetUrl) {
             const strategies = [
               { waitUntil: 'networkidle', timeout: 90000 },
@@ -410,7 +381,6 @@ jobs:
               { waitUntil: 'load', timeout: 45000 },
               { waitUntil: 'commit', timeout: 30000 },
             ];
-
             for (let i = 0; i < strategies.length; i++) {
               try {
                 console.log(`[Nav] Strategy ${i + 1}/${strategies.length}: waitUntil=${strategies[i].waitUntil}`);
@@ -425,8 +395,6 @@ jobs:
             console.error('[Nav] ❌ All navigation strategies failed.');
             return false;
           }
-
-          // ─── Asset interceptor ────────────────────────────────────
           function setupAssetCapture(page, outDir, mainDomain) {
             const captured = new Set();
             page.on('response', async (response) => {
@@ -434,11 +402,9 @@ jobs:
                 if (response.status() < 200 || response.status() >= 400) return;
                 const respUrl = (() => { try { return new URL(response.url()); } catch { return null; } })();
                 if (!respUrl) return;
-
                 const isInternal = respUrl.hostname === mainDomain ||
                                    respUrl.hostname.endsWith('.' + mainDomain);
                 if (!isInternal) return;
-
                 const ct = (response.headers()['content-type'] || '').toLowerCase();
                 const isAsset =
                   ct.includes('text/css') ||
@@ -449,14 +415,11 @@ jobs:
                   ct.includes('application/xml') ||
                   ct.includes('audio/') ||
                   ct.includes('video/');
-
                 if (!isAsset) return;
                 if (captured.has(response.url())) return;
                 captured.add(response.url());
-
                 const buffer = await response.body();
                 if (!buffer || buffer.length === 0) return;
-
                 const cleanPath = sanitizePath(respUrl.pathname);
                 const assetPath = path.join(outDir, 'assets', respUrl.hostname, cleanPath);
                 fs.mkdirSync(path.dirname(assetPath), { recursive: true });
@@ -464,17 +427,13 @@ jobs:
               } catch { /* silent — asset capture failures are non-critical */ }
             });
           }
-
-          // ─── Ultimate Page Loader v4 – سریع‌تر، هوشمندتر، مقاوم‌تر ──
           async function ultimatePageLoad(page) {
-            const maxScrollSteps = 200;         // حداکثر گام (پوشش ۱۰۰,۰۰۰px+)
-            const scrollDistance = 500;         // اسکرول هر بار
-            const idleWait = 1500;              // انتظار کوتاه پس از هر اسکرول (ms)
-            const networkIdleTimeout = 5000;    // ۵ ثانیه انتظار برای آرام‌شدن شبکه
-            const noChangeLimit = 5;            // توقف پس از ۵ بار عدم افزایش تصاویر
-            const finalWait = 3000;             // تأخیر نهایی
-
-            // تزریق MutationObserver برای ردیابی لحظه‌ای اضافه‌شدن تصاویر
+            const maxScrollSteps = 200;
+            const scrollDistance = 500;
+            const idleWait = 1500;
+            const networkIdleTimeout = 5000;
+            const noChangeLimit = 5;
+            const finalWait = 3000;
             await page.evaluate(() => {
               // فعال‌سازی اجباری همه تصاویر تنبل
               const forceLoad = (img) => {
@@ -484,13 +443,10 @@ jobs:
                 if (img.loading === 'lazy') img.loading = 'eager';
               };
               document.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original], img[loading="lazy"]').forEach(forceLoad);
-              // sourceها
               document.querySelectorAll('source[data-src], source[data-srcset]').forEach(source => {
                 if (source.dataset.src)    { source.src    = source.dataset.src;    source.removeAttribute('data-src'); }
                 if (source.dataset.srcset) { source.srcset = source.dataset.srcset; source.removeAttribute('data-srcset'); }
               });
-
-              // نصب Observer برای تصاویری که ممکن است بعداً توسط جاوااسکریپت اضافه شوند
               window.__imagesAdded = 0;
               const observer = new MutationObserver((mutations) => {
                 mutations.forEach(mutation => {
@@ -507,18 +463,13 @@ jobs:
               });
               observer.observe(document.body, { childList: true, subtree: true });
             });
-
-            // تابع کمکی: تعداد تصاویر بارگذاری‌شده (کامل)
             const countLoadedImages = () => page.evaluate(() =>
               Array.from(document.querySelectorAll('img')).filter(img => img.complete && img.naturalWidth > 0).length
             );
-
             let noChangeCount = 0;
             let lastLoadedCount = await countLoadedImages();
             let step = 0;
-
             while (step < maxScrollSteps) {
-              // اسکرول پنجره اصلی و اسکرول‌بارهای داخلی
               await page.evaluate((dy) => {
                 window.scrollBy(0, dy);
                 document.querySelectorAll('*').forEach(el => {
@@ -526,20 +477,13 @@ jobs:
                   if (style.overflowY === 'scroll' || style.overflowY === 'auto') el.scrollBy(0, dy);
                 });
               }, scrollDistance);
-
-              // وقفه کوتاه برای شروع بارگذاری
               await page.waitForTimeout(idleWait);
-
-              // انتظار برای آرام‌شدن نسبی شبکه (با تایم‌اوت کوتاه)
               try {
                 await page.waitForLoadState('networkidle', { timeout: networkIdleTimeout });
               } catch { /* مهم نیست */ }
-
-              // بررسی تصاویر تازه بارگذاری‌شده (حتی آنهایی که Observer ثبت کرده)
               const currentLoaded = await countLoadedImages();
               step++;
               console.log(`[Ultimate] Step ${step}: ${lastLoadedCount} → ${currentLoaded} images`);
-
               if (currentLoaded > lastLoadedCount) {
                 noChangeCount = 0;
                 lastLoadedCount = currentLoaded;
@@ -551,16 +495,11 @@ jobs:
                 }
               }
             }
-
-            // بازگشت به بالا و مکث کوتاه
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.waitForTimeout(finalWait);
-
             const finalCount = await countLoadedImages();
             console.log(`[Ultimate] Final image count: ${finalCount}`);
           }
-
-          // ─── Link collection ─────────────────────────────────────
           async function collectLinks(page) {
             return page.evaluate(() => {
               const s = new Set();
@@ -580,8 +519,6 @@ jobs:
               return [...s];
             }).catch(() => []);
           }
-
-          // ─── Screenshot با fallback ───────────────────────────────
           async function takeScreenshot(page, outPath, retries) {
             for (let i = 0; i < retries; i++) {
               // fullPage
@@ -605,11 +542,8 @@ jobs:
             console.error('[Screenshot] ❌ All screenshot attempts failed.');
             return false;
           }
-
-          // ─── PDF با fallback ──────────────────────────────────────
           async function generatePdf(page, outPath, retries) {
             for (let i = 0; i < retries; i++) {
-              // روش ۱: CDP stream (کامل‌ترین)
               try {
                 const session = await page.context().newCDPSession(page);
                 const result = await session.send('Page.printToPDF', {
@@ -626,7 +560,6 @@ jobs:
               } catch (e) {
                 console.log(`[PDF] ⚠️ CDP attempt ${i + 1} failed: ${e.message.split('\n')[0]}`);
               }
-              // روش ۲: Playwright built-in pdf()
               try {
                 await page.pdf({ path: outPath, format: 'A4', printBackground: true, timeout: 120000 });
                 console.log(`[PDF] ✅ Playwright pdf() on attempt ${i + 1}`);
@@ -639,12 +572,9 @@ jobs:
             console.error('[PDF] ❌ All PDF attempts failed.');
             return false;
           }
-
-          // ─── MAIN ─────────────────────────────────────────────────
           (async () => {
             let browser;
             const exitCode = { value: 0 };
-
             try {
               const launchOpts = {
                 headless: true,
@@ -665,10 +595,8 @@ jobs:
                   '--safebrowsing-disable-auto-update',
                 ],
               };
-
               const launcher = browserType === 'firefox' ? firefox : chromium;
               browser = await launcher.launch(launchOpts);
-
               const context = await browser.newContext({
                 userAgent: USER_AGENT,
                 extraHTTPHeaders: EXTRA_HEADERS,
@@ -680,29 +608,20 @@ jobs:
                 bypassCSP: true,
                 permissions: [],
               });
-
-              // مخفی کردن نشانه‌های automation
               await context.addInitScript(() => {
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
                 Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
                 Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
                 window.chrome = { runtime: {} };
               });
-
               const page = await context.newPage();
               setupAssetCapture(page, outDir, MAIN_DOMAIN);
-
-              // ─── Navigation ──────────────────────────────────
               const navOk = await navigateWithFallback(page, url);
               if (!navOk) {
                 console.error('❌ FATAL: Cannot load the page at all.');
                 exitCode.value = 1;
               }
-
-              // ─── Scroll + wait ───────────────────────────────
-              await smartScroll(page);
-
-              // ─── Link collection ─────────────────────────────
+              await ultimatePageLoad(page);
               const rawLinks = await collectLinks(page);
               const categorized = categorizeLinks(rawLinks, MAIN_DOMAIN);
               fs.writeFileSync(
@@ -710,13 +629,9 @@ jobs:
                 JSON.stringify(categorized, null, 2)
               );
               console.log(`[Links] ✅ ${categorized.summary.total} links collected and categorized.`);
-
-              // ─── HTML ────────────────────────────────────────
               const html = await page.content().catch(() => '<!-- page content unavailable -->');
               fs.writeFileSync(path.join(outDir, 'index.html'), html);
               console.log('[HTML] ✅ index.html saved.');
-
-              // ─── PDF direction ───────────────────────────────
               if (pdfAlign === 'rtl') {
                 await page.evaluate(() => {
                   document.documentElement.dir = 'rtl';
@@ -732,24 +647,17 @@ jobs:
                   document.body.style.textAlign = 'center';
                 }).catch(() => {});
               }
-
-              // ─── Screenshot ──────────────────────────────────
               await takeScreenshot(page, path.join(outDir, 'screenshot.png'), shotRetries);
-
-              // ─── PDF ─────────────────────────────────────────
               await generatePdf(page, path.join(outDir, 'page.pdf'), pdfRetries);
-
             } catch (fatal) {
               console.error('❌ FATAL error:', fatal.message);
               exitCode.value = 1;
             } finally {
               if (browser) await browser.close().catch(() => {});
             }
-
             process.exit(exitCode.value);
           })();
           PLAYWRIGHT_SCRIPT
-
           node extract.js \
             "${{ github.event.inputs.url }}" \
             "$OUT_DIR" \
@@ -766,7 +674,6 @@ jobs:
 
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
           OUTPUT="$OUT_DIR/page_monolith.html"
-
           run_monolith() {
             local target_url="$1"
             monolith "$target_url" \
@@ -775,7 +682,6 @@ jobs:
               --no-video \
               -o "$OUTPUT" 2>&1
           }
-
           if [ "${MONOLITH_AVAILABLE:-true}" = "true" ]; then
             # fallback ۱: URL پاک
             if run_monolith "$CLEAN_URL"; then
@@ -806,14 +712,12 @@ jobs:
               -O "$OUTPUT" "$URL" \
               || { echo "⚠️ wget fallback failed. Creating placeholder."; echo "<html><body><p>Monolith unavailable.</p></body></html>" > "$OUTPUT"; }
           fi
-
           ls -lh "$OUTPUT" 2>/dev/null || echo "⚠️ page_monolith.html not created."
 
       # ── ۹. Package & ZIP ──────────────────────────────────
       - name: "📦 Package output and create ZIP"
         run: |
           set -euo pipefail
-
           FOLDER_NAME="${{ env.FOLDER_NAME }}"
           ZIP_PASSWORD="${{ github.event.inputs.zip_password }}"
           ENABLE_SPLIT="${{ github.event.inputs.enable_split }}"
@@ -821,16 +725,12 @@ jobs:
           MAX_PART_SIZE_MB="${{ github.event.inputs.max_part_size_mb }}"
           OUTPUT_TYPE="${{ github.event.inputs.output_type }}"
           CL="${{ env.COMPRESSION_LEVEL }}"
-
           BACKUP_DIR="/tmp/backup_$$_${FOLDER_NAME}"
           mkdir -p "$BACKUP_DIR"
           echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
-
           cd BROWSER
-
           ZIP_BASE="${FOLDER_NAME}"
           ARCHIVE_PATH="${ZIP_BASE}.zip"
-
           TOTAL_SIZE=0
           if [ -d "$FOLDER_NAME" ]; then
             TOTAL_SIZE=$(du -sb "$FOLDER_NAME" 2>/dev/null | cut -f1 || echo "0")
@@ -839,7 +739,6 @@ jobs:
           # ─── محاسبه split size ────────────────────────────
           USE_SPLIT=false
           SPLIT_SIZE=100
-
           if [ "$ENABLE_SPLIT" = "true" ]; then
             if [ -n "$MAX_PART_SIZE_MB" ] && echo "$MAX_PART_SIZE_MB" | grep -qE '^[0-9]+$' && [ "$MAX_PART_SIZE_MB" -gt 0 ]; then
               SPLIT_SIZE="$MAX_PART_SIZE_MB"

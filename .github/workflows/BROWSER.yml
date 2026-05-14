@@ -901,6 +901,7 @@ jobs:
           DOMAIN: "${{ env.DOMAIN }}"
           TIMESTAMP: "${{ env.TIMESTAMP }}"
           PDF_ALIGN: "${{ github.event.inputs.pdf_text_align }}"
+          WAIT_MS: ${{ env.WAIT_MS }}
         run: |
           set -euo pipefail
 
@@ -914,7 +915,6 @@ jobs:
           URL="${{ env.URL }}"
           DOMAIN="${{ env.DOMAIN }}"
           TIMESTAMP="${{ env.TIMESTAMP }}"
-          WAIT_MS="${{ env.WAIT_MS }}"
 
           cd BROWSER
 

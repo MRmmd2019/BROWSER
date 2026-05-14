@@ -1,0 +1,25 @@
+inputs:
+  url: { required: true }
+  compression_level: { required: false, default: '6' }
+  screenshot_retries: { required: false, default: '3' }
+  pdf_retries: { required: false, default: '3' }
+  wait_extra_ms: { required: false, default: '5000' }
+runs:
+  using: "composite"
+  steps:
+    - name: Validate inputs
+      env:
+        URL: ${{ inputs.url }}
+        CL: ${{ inputs.compression_level }}
+        SR: ${{ inputs.screenshot_retries }}
+        PR: ${{ inputs.pdf_retries }}
+        WAIT: ${{ inputs.wait_extra_ms }}
+      run: |
+        set -euo pipefail
+        if [[ ! "$URL" =~ ^https?:// ]]; then echo "❌ URL must start with http:// or https://"; exit 1; fi
+        if [[ ! "$CL" =~ ^[1-9]$ ]]; then echo "COMPRESSION_LEVEL=6" >> $GITHUB_ENV; else echo "COMPRESSION_LEVEL=$CL" >> $GITHUB_ENV; fi
+        if [[ ! "$SR" =~ ^[1-5]$ ]]; then echo "SCREENSHOT_RETRIES=3" >> $GITHUB_ENV; else echo "SCREENSHOT_RETRIES=$SR" >> $GITHUB_ENV; fi
+        if [[ ! "$PR" =~ ^[1-5]$ ]]; then echo "PDF_RETRIES=3" >> $GITHUB_ENV; else echo "PDF_RETRIES=$PR" >> $GITHUB_ENV; fi
+        if [[ ! "$WAIT" =~ ^[0-9]+$ ]] || [ "$WAIT" -gt 30000 ]; then echo "WAIT_MS=5000" >> $GITHUB_ENV; else echo "WAIT_MS=$WAIT" >> $GITHUB_ENV; fi
+        echo "✅ All inputs validated."
+      shell: bash

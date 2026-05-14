@@ -1272,6 +1272,12 @@ jobs:
       # ── ۱۲. Summary ──────────────────────────────────────
       - name: "📊 Workflow Summary"
         if: always()
+        env:
+          URL: "${{ github.event.inputs.url }}"
+          OUTPUT_TYPE: "${{ github.event.inputs.output_type }}"
+          COMPRESSION: "${{ env.COMPRESSION_LEVEL }}"
+          BROWSER: "${{ env.BROWSER_TYPE }}"
+          FOLDER: "${{ env.FOLDER_NAME }}"
         run: |
           echo "## 🧩 Browser Extractor Pro — Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

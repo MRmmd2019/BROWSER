@@ -883,6 +883,18 @@ jobs:
 
       # ── ۱۰. Generate READMEs & links.txt ─────────────────
       - name: "📝 Generate README and links.txt"
+        env:
+          FOLDER_NAME: "${{ env.FOLDER_NAME }}"
+          REPO_OWNER: "${{ github.repository_owner }}"
+          REPO_FULL: "${{ github.repository }}"
+          BRANCH: "${{ github.ref_name }}"
+          ZIP_PASSWORD: "${{ github.event.inputs.zip_password }}"
+          CL: "${{ env.COMPRESSION_LEVEL }}"
+          OUTPUT_TYPE: "${{ github.event.inputs.output_type }}"
+          URL: "${{ env.URL }}"
+          DOMAIN: "${{ env.DOMAIN }}"
+          TIMESTAMP: "${{ env.TIMESTAMP }}"
+          PDF_ALIGN: "${{ github.event.inputs.pdf_text_align }}"
         run: |
           set -euo pipefail
 
@@ -965,7 +977,7 @@ jobs:
             echo "| **Captured At** | ${TIMESTAMP} (UTC) |"
             echo "| **Output Type** | \`${OUTPUT_TYPE}\` |"
             echo "| **Compression Level** | ${CL}/9 |"
-            echo "| **PDF Direction** | ${{ github.event.inputs.pdf_text_align }} |"
+            echo "| **PDF Direction** | ${PDF_ALIGN} |"
             echo "| **Password Protected** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ YES" || echo "❌ NO") |"
             if [ "$HAS_ZIP" = true ]; then
               echo "| **Total ZIP Size** | ${SIZE} (${TOTAL_PARTS} part(s)) |"
@@ -1075,7 +1087,7 @@ jobs:
             echo "| **زمان آرشیو** | ${TIMESTAMP} (UTC) |"
             echo "| **نوع خروجی** | \`${OUTPUT_TYPE}\` |"
             echo "| **سطح فشرده‌سازی** | ${CL} از ۹ |"
-            echo "| **جهت PDF** | ${{ github.event.inputs.pdf_text_align }} |"
+            echo "| **جهت PDF** | ${PDF_ALIGN} |"
             echo "| **محافظت با رمز** | $([ -n "$ZIP_PASSWORD" ] && echo "✅ بله" || echo "❌ خیر") |"
             if [ "$HAS_ZIP" = true ]; then
               echo "| **حجم کل ZIP** | ${SIZE} (${TOTAL_PARTS} بخش) |"
